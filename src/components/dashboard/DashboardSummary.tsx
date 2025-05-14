@@ -1,11 +1,15 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Calendar, CheckSquare, LayoutDashboard, Dumbbell, Droplet } from "lucide-react";
+import { Calendar, CheckSquare, Dumbbell, Droplet } from "lucide-react";
 import { TasksOverview } from "./TasksOverview";
 import { WaterTracker } from "../fitness/WaterTracker";
+import { useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
 
 export function DashboardSummary() {
+  const navigate = useNavigate();
+  
   // Placeholder data
   const stats = [
     {
@@ -13,31 +17,41 @@ export function DashboardSummary() {
       value: "3",
       description: "2 de alta prioridade",
       icon: CheckSquare,
-      color: "text-blue-500",
+      color: "text-primary",
+      path: "/tasks",
+      filterParams: "?status=pending",
     },
     {
       title: "Eventos Hoje",
       value: "2",
       description: "Próximo em 2 horas",
       icon: Calendar,
-      color: "text-purple-500",
+      color: "text-secondary",
+      path: "/calendar",
     },
     {
       title: "Treinos na Semana",
       value: "4/5",
       description: "80% do objetivo",
       icon: Dumbbell,
-      color: "text-green-500",
+      color: "text-emerald-400",
+      path: "/fitness",
     },
     {
       title: "Hidratação",
       value: "1.2/2.5L",
       description: "48% do objetivo diário",
       icon: Droplet,
-      color: "text-blue-400",
+      color: "text-sky-400",
       progress: 48,
+      path: "/fitness",
+      filterParams: "?section=water",
     },
   ];
+
+  const handleCardClick = (path: string, filterParams?: string) => {
+    navigate(path + (filterParams || ''));
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -50,7 +64,11 @@ export function DashboardSummary() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat, index) => (
-          <Card key={index} className="overflow-hidden">
+          <Card 
+            key={index} 
+            className="overflow-hidden transition-all duration-200 hover:shadow-md cursor-pointer"
+            onClick={() => handleCardClick(stat.path, stat.filterParams)}
+          >
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
               <CardTitle className="text-sm font-medium">
                 {stat.title}
@@ -76,8 +94,4 @@ export function DashboardSummary() {
       </div>
     </div>
   );
-}
-
-function cn(...classes: string[]) {
-  return classes.filter(Boolean).join(' ');
 }

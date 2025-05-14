@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle, Clock, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { toast } from "@/components/ui/use-toast";
 
 export function TasksOverview() {
   const navigate = useNavigate();
@@ -56,6 +57,20 @@ export function TasksOverview() {
     }
   };
 
+  const handleTaskClick = (taskId: string) => {
+    // Em uma aplicação real, isso levaria para a página de detalhes da tarefa
+    navigate(`/tasks?taskId=${taskId}`);
+  };
+
+  const handleCompleteTask = (e: React.MouseEvent, taskId: string) => {
+    e.stopPropagation(); // Evita que o clique propague para o card
+    // Em uma aplicação real, isso marcaria a tarefa como concluída
+    toast({
+      title: "Tarefa concluída",
+      description: `A tarefa #${taskId} foi marcada como concluída.`,
+    });
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -69,7 +84,8 @@ export function TasksOverview() {
           {todayTasks.map((task) => (
             <div 
               key={task.id} 
-              className={`task-card flex justify-between items-center priority-${task.priority}`}
+              className={`task-card flex justify-between items-center priority-${task.priority} cursor-pointer transition-all duration-200 hover:translate-y-[-2px]`}
+              onClick={() => handleTaskClick(task.id)}
             >
               <div className="flex items-center space-x-4">
                 <div className="flex-shrink-0">
@@ -85,7 +101,12 @@ export function TasksOverview() {
                   </div>
                 </div>
               </div>
-              <Button variant="ghost" size="icon">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={(e) => handleCompleteTask(e, task.id)}
+                className="text-primary hover:text-primary hover:bg-primary/10"
+              >
                 <CheckCircle className="h-5 w-5" />
               </Button>
             </div>
@@ -93,7 +114,7 @@ export function TasksOverview() {
           
           <Button 
             variant="outline" 
-            className="w-full mt-4"
+            className="w-full mt-4 border-primary text-primary hover:bg-primary/10 hover:text-primary"
             onClick={() => navigate('/tasks')}
           >
             Ver Todas as Tarefas
