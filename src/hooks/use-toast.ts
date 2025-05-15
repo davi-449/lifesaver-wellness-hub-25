@@ -77,7 +77,8 @@ interface State {
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
-const memoryState: State = { toasts: [] };
+// Changed from const to let so we can reassign it
+let memoryState: State = { toasts: [] };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
