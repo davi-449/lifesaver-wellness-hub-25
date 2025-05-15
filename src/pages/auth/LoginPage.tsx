@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +9,8 @@ import { Mail, Lock, LogIn } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 const LoginPage = () => {
+  console.log("Renderizando LoginPage");
+  
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -19,6 +20,7 @@ const LoginPage = () => {
   // Verificar se já está autenticado
   useEffect(() => {
     const checkAuth = async () => {
+      console.log("Verificando autenticação");
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         navigate("/");

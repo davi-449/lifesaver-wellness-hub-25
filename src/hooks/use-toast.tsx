@@ -7,15 +7,15 @@ import {
 } from "@/components/ui/toast";
 
 // Define the toast options type
-type ToastOptions = ToastProps & {
+type ToastOptions = Omit<ToastProps, "id"> & {
   title?: string;
   description?: string;
   action?: ToastActionElement;
 };
 
-// Create a type for our toast store but don't extend ToastOptions directly
+// Create a type for our toast store 
 interface ToastInfo {
-  id: string;
+  id: string; // Ensure id is always string
   title?: string;
   description?: string;
   action?: ToastActionElement;
