@@ -70,7 +70,18 @@ export function TaskModal({ open, onOpenChange, task, mode, onSuccess }: TaskMod
           .select('*');
         
         if (error) throw error;
-        if (data) setCategories(data);
+        if (data) {
+          // Convertendo explicitamente para o tipo Category
+          const typedCategories: Category[] = data.map(item => ({
+            id: item.id,
+            name: item.name,
+            color: item.color,
+            user_id: item.user_id,
+            created_at: item.created_at,
+            updated_at: item.updated_at
+          }));
+          setCategories(typedCategories);
+        }
       } catch (error) {
         console.error('Erro ao carregar categorias:', error);
         toast({
@@ -120,6 +131,11 @@ export function TaskModal({ open, onOpenChange, task, mode, onSuccess }: TaskMod
 
     try {
       const categoryObj = categories.find(c => c.name === category);
+      const userId = (await supabase.auth.getUser()).data.user?.id;
+      
+      if (!userId) {
+        throw new Error("Usuário não autenticado");
+      }
       
       if (mode === 'create') {
         // Criar nova tarefa
@@ -131,7 +147,8 @@ export function TaskModal({ open, onOpenChange, task, mode, onSuccess }: TaskMod
             due_date: dueDate?.toISOString() || null,
             category_id: categoryObj?.id || null,
             priority,
-            status
+            status,
+            user_id: userId
           });
 
         if (error) throw error;
@@ -206,6 +223,17 @@ export function TaskModal({ open, onOpenChange, task, mode, onSuccess }: TaskMod
     } finally {
       setIsLoading(false);
       setDeleteAlertOpen(false);
+    }
+  };
+
+  // Função para obter label legível para uma categoria
+  const getCategoryLabel = (categoryName: string) => {
+    switch (categoryName) {
+      case "work": return "Trabalho";
+      case "study": return "Estudos";
+      case "fitness": return "Fitness";
+      case "personal": return "Pessoal";
+      default: return categoryName;
     }
   };
 
@@ -285,16 +313,13 @@ export function TaskModal({ open, onOpenChange, task, mode, onSuccess }: TaskMod
                   </SelectTrigger>
                   <SelectContent>
                     {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.name}>
+                      <SelectItem key={cat.id} value={cat.name.toString()}>
                         <div className="flex items-center">
                           <span
                             className="w-3 h-3 rounded-full mr-2"
                             style={{ backgroundColor: cat.color }}
                           />
-                          {cat.name === "work" ? "Trabalho" : 
-                           cat.name === "study" ? "Estudos" : 
-                           cat.name === "fitness" ? "Fitness" : 
-                           cat.name === "personal" ? "Pessoal" : cat.name}
+                          {getCategoryLabel(cat.name.toString())}
                         </div>
                       </SelectItem>
                     ))}

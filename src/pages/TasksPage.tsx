@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Task, Priority, Category, TaskStatus } from "@/types";
+import { Task, Category, Priority, TaskStatus } from "@/types";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
@@ -52,14 +52,25 @@ const TasksPage = () => {
           description: task.description,
           dueDate: task.due_date ? new Date(task.due_date) : undefined,
           category: task.categories?.name || 'work',
+          category_id: task.category_id,
           priority: task.priority as Priority,
           status: task.status as TaskStatus,
           createdAt: new Date(task.created_at),
           updatedAt: new Date(task.updated_at),
         }));
         
+        // Converter categorias para o formato esperado
+        const formattedCategories: Category[] = categoriesData ? categoriesData.map(cat => ({
+          id: cat.id,
+          name: cat.name,
+          color: cat.color,
+          user_id: cat.user_id,
+          created_at: cat.created_at,
+          updated_at: cat.updated_at
+        })) : [];
+        
         setTasks(formattedTasks);
-        setCategories(categoriesData || []);
+        setCategories(formattedCategories);
       } catch (error) {
         console.error('Erro ao carregar dados:', error);
         toast({

@@ -1,14 +1,24 @@
 
 export type Priority = "high" | "medium" | "low";
-export type Category = "work" | "study" | "fitness" | "personal";
+export type CategoryName = "work" | "study" | "fitness" | "personal";
 export type TaskStatus = "pending" | "in-progress" | "completed";
+
+export interface Category {
+  id: string;
+  name: CategoryName | string;
+  color: string;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface Task {
   id: string;
   title: string;
   description?: string;
   dueDate?: Date;
-  category: Category;
+  category: CategoryName | string;
+  category_id?: string; 
   priority: Priority;
   status: TaskStatus;
   createdAt: Date;
