@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ export function MeasurementsForm() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const [measurements, setMeasurements] = useState({
     weight: "",
     chest: "",
@@ -23,6 +24,18 @@ export function MeasurementsForm() {
     body_fat: "",
     notes: ""
   });
+
+  // Fetch current user on component mount
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+      }
+    };
+    
+    fetchUser();
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -36,6 +49,16 @@ export function MeasurementsForm() {
     e.preventDefault();
     setLoading(true);
 
+    if (!userId) {
+      toast({
+        title: "Erro de autenticação",
+        description: "Você precisa estar logado para salvar medidas corporais.",
+        variant: "destructive"
+      });
+      setLoading(false);
+      return;
+    }
+
     try {
       // Convert empty strings to null
       const measurementsData = Object.entries(measurements).reduce((acc, [key, value]) => {
@@ -47,7 +70,8 @@ export function MeasurementsForm() {
         .from('body_measurements')
         .insert({
           ...measurementsData,
-          date: new Date().toISOString()
+          date: new Date().toISOString(),
+          user_id: userId
         });
 
       if (error) throw error;

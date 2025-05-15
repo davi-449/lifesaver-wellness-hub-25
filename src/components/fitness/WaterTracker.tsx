@@ -12,20 +12,34 @@ export function WaterTracker() {
   const [waterIntake, setWaterIntake] = useState(0);
   const [targetIntake, setTargetIntake] = useState(2500);
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
   const glassSize = 250; // ml
   
   const percentComplete = Math.min(Math.round((waterIntake / targetIntake) * 100), 100);
   
   useEffect(() => {
-    fetchWaterIntake();
-    fetchWaterGoal();
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+        fetchWaterIntake();
+        fetchWaterGoal();
+      } else {
+        setLoading(false);
+      }
+    };
+    
+    fetchUser();
   }, []);
   
   const fetchWaterGoal = async () => {
     try {
+      if (!userId) return;
+      
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('water_intake_goal')
+        .eq('id', userId)
         .single();
       
       if (error) throw error;
@@ -40,6 +54,8 @@ export function WaterTracker() {
   
   const fetchWaterIntake = async () => {
     try {
+      if (!userId) return;
+      
       // Get today's water intake
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -47,6 +63,7 @@ export function WaterTracker() {
       const { data, error } = await supabase
         .from('water_intake')
         .select('amount')
+        .eq('user_id', userId)
         .gte('date', today.toISOString())
         .lt('date', new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString());
       
@@ -63,6 +80,15 @@ export function WaterTracker() {
   };
   
   const addWater = async () => {
+    if (!userId) {
+      toast({
+        title: "Erro de autenticação",
+        description: "Você precisa estar logado para registrar hidratação.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     const newIntake = waterIntake + glassSize;
     
     try {
@@ -70,7 +96,8 @@ export function WaterTracker() {
         .from('water_intake')
         .insert({
           amount: glassSize,
-          date: new Date().toISOString()
+          date: new Date().toISOString(),
+          user_id: userId
         });
       
       if (error) throw error;
@@ -96,11 +123,21 @@ export function WaterTracker() {
   const removeWater = async () => {
     if (waterIntake <= 0) return;
     
+    if (!userId) {
+      toast({
+        title: "Erro de autenticação",
+        description: "Você precisa estar logado para gerenciar hidratação.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     try {
       // First we need to find the most recent water intake record
       const { data, error: fetchError } = await supabase
         .from('water_intake')
         .select('id, amount')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(1);
       
@@ -162,6 +199,12 @@ export function WaterTracker() {
         {loading ? (
           <div className="h-[200px] flex items-center justify-center">
             Carregando...
+          </div>
+        ) : !userId ? (
+          <div className="h-[200px] flex items-center justify-center flex-col gap-2">
+            <p className="text-muted-foreground text-center">
+              Você precisa estar logado para ver seu registro de hidratação
+            </p>
           </div>
         ) : (
           <>

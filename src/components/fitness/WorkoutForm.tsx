@@ -1,12 +1,12 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Dumbbell, X, Plus } from "lucide-react";
@@ -28,9 +28,22 @@ export function WorkoutForm() {
   const [duration, setDuration] = useState(30);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const [exercises, setExercises] = useState<Exercise[]>([
     { id: crypto.randomUUID(), name: "", sets: 3, reps: 12, weight: null, duration: null }
   ]);
+
+  // Fetch current user on component mount
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+      }
+    };
+    
+    fetchUser();
+  }, []);
 
   const addExercise = () => {
     setExercises([
@@ -57,6 +70,16 @@ export function WorkoutForm() {
     e.preventDefault();
     setLoading(true);
     
+    if (!userId) {
+      toast({
+        title: "Erro de autenticação",
+        description: "Você precisa estar logado para registrar treinos.",
+        variant: "destructive"
+      });
+      setLoading(false);
+      return;
+    }
+    
     try {
       // 1. Insert the workout
       const { data: workout, error: workoutError } = await supabase
@@ -67,6 +90,7 @@ export function WorkoutForm() {
           duration,
           notes,
           date: new Date().toISOString(),
+          user_id: userId
         })
         .select()
         .single();
