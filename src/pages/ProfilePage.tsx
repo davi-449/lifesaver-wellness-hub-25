@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -132,11 +131,7 @@ const ProfilePage = () => {
     
     setSaving(true);
     try {
-      console.log("Saving profile with:", {
-        work_days: profile.workDays,
-        study_days: profile.studyDays,
-        // Other fields...
-      });
+      console.log("Saving profile with:", profile);
       
       const { error } = await supabase
         .from('profiles')
@@ -247,19 +242,19 @@ const ProfilePage = () => {
       }
       
       const file = event.target.files[0];
-      const fileExt = file.name.split('.').pop();
       const filePath = `${user.id}`;
       
       setUploadingAvatar(true);
       
       // Verificar se o bucket existe, se não, criá-lo
-      const { data: bucketData, error: bucketError } = await supabase.storage
-        .getBucket('avatars');
-        
-      if (bucketError && bucketError.message.includes('does not exist')) {
-        await supabase.storage.createBucket('avatars', {
+      const { data: buckets } = await supabase.storage.listBuckets();
+      const avatarBucketExists = buckets?.some(bucket => bucket.name === 'avatars');
+      
+      if (!avatarBucketExists) {
+        const { error } = await supabase.storage.createBucket('avatars', {
           public: true
         });
+        if (error) throw error;
       }
       
       // Fazer upload do arquivo
