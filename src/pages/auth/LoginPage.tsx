@@ -13,43 +13,75 @@ const LoginPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loginError, setLoginError] = useState("");
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Verificar se já está autenticado
+  // Check if user is already authenticated
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        navigate("/");
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          navigate("/");
+        }
+      } catch (error) {
+        console.error("Auth check error:", error);
       }
     };
     
     checkAuth();
+    
+    // Listen for authentication state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        navigate("/");
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoginError("");
     setLoading(true);
     
+    if (!email || !password) {
+      setLoginError("Email e senha são obrigatórios");
+      setLoading(false);
+      return;
+    }
+    
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       
-      if (error) throw error;
-      
-      toast({
-        title: "Login realizado com sucesso!",
-        description: "Bem-vindo ao WellnessHub"
-      });
-      
-      navigate("/");
+      if (error) {
+        console.error("Login error:", error);
+        setLoginError(error.message || "Erro ao fazer login. Verifique suas credenciais.");
+        toast({
+          title: "Erro ao fazer login",
+          description: error.message || "Verifique suas credenciais e tente novamente",
+          variant: "destructive"
+        });
+      } else if (data?.session) {
+        toast({
+          title: "Login realizado com sucesso!",
+          description: "Bem-vindo ao WellnessHub"
+        });
+        navigate("/");
+      }
     } catch (error: any) {
+      console.error("Unexpected login error:", error);
+      setLoginError(error.message || "Um erro inesperado ocorreu durante o login");
       toast({
         title: "Erro ao fazer login",
-        description: error.message || "Verifique suas credenciais e tente novamente",
+        description: error.message || "Um erro inesperado ocorreu. Tente novamente mais tarde.",
         variant: "destructive"
       });
     } finally {
@@ -74,6 +106,12 @@ const LoginPage = () => {
           </CardHeader>
           <form onSubmit={handleLogin}>
             <CardContent className="space-y-4">
+              {loginError && (
+                <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md">
+                  {loginError}
+                </div>
+              )}
+              
               <div className="space-y-2">
                 <Label htmlFor="email">E-mail</Label>
                 <div className="relative">
@@ -92,9 +130,9 @@ const LoginPage = () => {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Senha</Label>
-                  <Button variant="link" className="p-0 h-auto text-xs" type="button">
+                  <Link to="/forgot-password" className="text-xs text-primary hover:underline">
                     Esqueceu a senha?
-                  </Button>
+                  </Link>
                 </div>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
