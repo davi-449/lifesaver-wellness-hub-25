@@ -5,7 +5,7 @@ export type TaskStatus = "pending" | "in-progress" | "completed";
 
 export interface Category {
   id: string;
-  name: CategoryName | string;
+  name: string;
   color: string;
   user_id: string;
   created_at: string;
@@ -74,4 +74,19 @@ export interface UserProfile {
   fitnessLevel: "beginner" | "intermediate" | "advanced";
   fitnessGoals: string[]; // e.g., ["Lose weight", "Build muscle", "Improve endurance"]
   waterIntakeGoal: number; // daily target in ml
+}
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  description?: string;
+  start_date: string;
+  end_date: string;
+  location?: string;
+  is_all_day?: boolean;
+  color?: string;
+  google_event_id?: string;
+  created_at: string;
+  updated_at: string;
+  user_id: string;
 }

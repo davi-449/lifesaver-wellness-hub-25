@@ -82,14 +82,14 @@ export function AppSidebar() {
       
       <aside 
         className={cn(
-          "fixed left-0 top-0 bottom-0 w-64 bg-background border-r border-border shadow-lg z-40 transition-transform duration-300 ease-in-out",
+          "fixed left-0 top-0 bottom-0 bg-background border-r border-border shadow-lg z-40 transition-all duration-300 ease-in-out h-full",
           collapsed && !isMobile ? "w-16" : "w-64",
           isMobile ? (mobileOpen ? "translate-x-0" : "translate-x-[-100%]") : "translate-x-0"
         )}
       >
         <div className="flex items-center justify-between p-4 h-14 border-b">
           <h1 className={cn("text-xl font-bold text-primary transition-opacity duration-300", 
-                           collapsed && !isMobile && "opacity-0")}>
+                           collapsed && !isMobile ? "opacity-0" : "opacity-100")}>
             WellnessHub
           </h1>
           {!isMobile && (
@@ -104,7 +104,7 @@ export function AppSidebar() {
           )}
         </div>
         
-        <nav className="p-2 space-y-1">
+        <nav className="p-2 space-y-1 mt-2">
           {menuItems.map((item) => (
             <NavLink
               key={item.path}

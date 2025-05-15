@@ -65,6 +65,51 @@ export type Database = {
           },
         ]
       }
+      calendar_events: {
+        Row: {
+          color: string | null
+          created_at: string
+          description: string | null
+          end_date: string
+          google_event_id: string | null
+          id: string
+          is_all_day: boolean | null
+          location: string | null
+          start_date: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          end_date: string
+          google_event_id?: string | null
+          id?: string
+          is_all_day?: boolean | null
+          location?: string | null
+          start_date: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          end_date?: string
+          google_event_id?: string | null
+          id?: string
+          is_all_day?: boolean | null
+          location?: string | null
+          start_date?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           color: string
@@ -102,37 +147,61 @@ export type Database = {
       }
       profiles: {
         Row: {
+          age: number | null
           body_fat_goal: number | null
           created_at: string
           display_name: string
           fitness_level: string | null
           height: number | null
           id: string
+          study_course: string | null
+          study_days: string[] | null
+          study_end_time: string | null
+          study_start_time: string | null
           updated_at: string
           water_intake_goal: number
           weight_goal: number | null
+          work_days: string[] | null
+          work_end_time: string | null
+          work_start_time: string | null
         }
         Insert: {
+          age?: number | null
           body_fat_goal?: number | null
           created_at?: string
           display_name: string
           fitness_level?: string | null
           height?: number | null
           id: string
+          study_course?: string | null
+          study_days?: string[] | null
+          study_end_time?: string | null
+          study_start_time?: string | null
           updated_at?: string
           water_intake_goal?: number
           weight_goal?: number | null
+          work_days?: string[] | null
+          work_end_time?: string | null
+          work_start_time?: string | null
         }
         Update: {
+          age?: number | null
           body_fat_goal?: number | null
           created_at?: string
           display_name?: string
           fitness_level?: string | null
           height?: number | null
           id?: string
+          study_course?: string | null
+          study_days?: string[] | null
+          study_end_time?: string | null
+          study_start_time?: string | null
           updated_at?: string
           water_intake_goal?: number
           weight_goal?: number | null
+          work_days?: string[] | null
+          work_end_time?: string | null
+          work_start_time?: string | null
         }
         Relationships: []
       }
@@ -199,6 +268,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_integrations: {
+        Row: {
+          created_at: string
+          google_calendar_sync: boolean | null
+          google_fitness_sync: boolean | null
+          google_refresh_token: string | null
+          id: string
+          last_sync_timestamp: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          google_calendar_sync?: boolean | null
+          google_fitness_sync?: boolean | null
+          google_refresh_token?: string | null
+          id?: string
+          last_sync_timestamp?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          google_calendar_sync?: boolean | null
+          google_fitness_sync?: boolean | null
+          google_refresh_token?: string | null
+          id?: string
+          last_sync_timestamp?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       water_intake: {
         Row: {
