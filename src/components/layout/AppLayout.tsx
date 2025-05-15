@@ -1,7 +1,7 @@
 
-import { useState, useEffect } from "react";
-import { AppSidebar } from "./AppSidebar";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { AppSidebar } from "./AppSidebar";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -9,13 +9,10 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   
   useEffect(() => {
     const handleResize = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      setSidebarOpen(!mobile);
+      setIsMobile(window.innerWidth < 768);
     };
     
     window.addEventListener('resize', handleResize);
@@ -26,10 +23,10 @@ export function AppLayout({ children }: AppLayoutProps) {
     <div className="flex min-h-screen w-full bg-background">
       <AppSidebar />
       <main className={cn(
-        "flex-1 transition-all duration-300 ease-in-out",
-        isMobile ? "px-4 pt-16 pb-4" : "p-6",
-        isMobile ? "w-full" : "ml-16",
-        !isMobile && sidebarOpen && "ml-64"
+        "flex-1 transition-all duration-300",
+        isMobile 
+          ? "p-4 pb-20" // Add padding at bottom for mobile navigation
+          : "p-6 ml-64" // Add margin for desktop sidebar
       )}>
         {children}
       </main>
