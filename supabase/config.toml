@@ -1,1 +1,6 @@
+
 project_id = "cehyvmdrnzidrmlvwzqx"
+
+[storage]
+[storage.avatars]
+public = true

@@ -5,7 +5,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.6'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+};
 
 // Google OAuth2 configuration
 const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || '';
@@ -15,10 +15,10 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || '';
 
 console.log("Edge function initialized with configuration:");
+console.log("SUPABASE_URL:", SUPABASE_URL);
 console.log("GOOGLE_CLIENT_ID exists:", !!GOOGLE_CLIENT_ID);
 console.log("GOOGLE_CLIENT_SECRET exists:", !!GOOGLE_CLIENT_SECRET);
 console.log("REDIRECT_URI:", REDIRECT_URI);
-console.log("SUPABASE_URL exists:", !!SUPABASE_URL);
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -51,14 +51,8 @@ serve(async (req) => {
     }
     
     // Parse request details
-    let requestData;
-    try {
-      requestData = await req.json();
-      console.log("Request data:", JSON.stringify(requestData));
-    } catch (e) {
-      console.error("Failed to parse request JSON:", e);
-      requestData = {};
-    }
+    const requestData = await req.json().catch(() => ({}));
+    console.log("Request data:", JSON.stringify(requestData));
     
     // Determine action from URL or request data
     const url = new URL(req.url);
@@ -183,15 +177,25 @@ serve(async (req) => {
       }
 
       case 'sync-calendar': {
+        console.log("Starting calendar sync for user", user.id);
+        
         // Get user integration info
         const { data: userIntegration, error: integrationError } = await supabase
           .from('user_integrations')
           .select('*')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
-        if (integrationError || !userIntegration?.google_refresh_token) {
+        if (integrationError) {
           console.error("Failed to find Google integration:", integrationError);
+          return new Response(
+            JSON.stringify({ error: 'Erro ao buscar informações de integração' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        if (!userIntegration?.google_refresh_token) {
+          console.error("No refresh token found");
           return new Response(
             JSON.stringify({ error: 'Integração com Google não encontrada' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -223,16 +227,26 @@ serve(async (req) => {
           );
         }
 
+        console.log("Successfully refreshed access token");
+        
         // Sync calendar events
-        const eventsCount = await syncCalendarEvents(user.id, tokenData.access_token, supabase);
-
-        return new Response(
-          JSON.stringify({ 
-            message: 'Sincronização de calendário concluída',
-            eventsCount
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        try {
+          const eventsCount = await syncCalendarEvents(user.id, tokenData.access_token, supabase);
+          
+          return new Response(
+            JSON.stringify({ 
+              message: 'Sincronização de calendário concluída',
+              eventsCount
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (error) {
+          console.error("Calendar sync failed:", error);
+          return new Response(
+            JSON.stringify({ error: 'Falha ao sincronizar calendário', details: error.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
 
       default:
@@ -252,7 +266,7 @@ serve(async (req) => {
 });
 
 // Function to sync calendar events
-async function syncCalendarEvents(userId: string, accessToken: string, supabase: any): Promise<number> {
+async function syncCalendarEvents(userId, accessToken, supabase) {
   console.log("Starting calendar sync for user", userId);
   
   // Fetch events from Google Calendar
@@ -281,7 +295,7 @@ async function syncCalendarEvents(userId: string, accessToken: string, supabase:
   }
 
   // Process and store calendar events
-  const events = calendarData.items.map((event: any) => ({
+  const events = calendarData.items.map((event) => ({
     user_id: userId,
     title: event.summary || 'Sem título',
     description: event.description,

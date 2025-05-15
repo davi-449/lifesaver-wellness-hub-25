@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { User, Settings, Bell, Shield, LogOut, Calendar, Activity, Image } from "lucide-react";
+import { User, Settings, Bell, Shield, LogOut, Calendar, Activity, Image, RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -69,6 +69,8 @@ const ProfilePage = () => {
         
         if (profileError) throw profileError;
         
+        console.log("Profile data:", profileData);
+        
         // Get integration data
         const { data: integrationData } = await supabase
           .from('user_integrations')
@@ -77,12 +79,16 @@ const ProfilePage = () => {
           .maybeSingle();
         
         // Check if user has avatar
-        const { data: avatarData } = await supabase.storage
-          .from('avatars')
-          .getPublicUrl(`${user.id}`);
-          
-        if (avatarData) {
-          setAvatarUrl(`${avatarData.publicUrl}?t=${new Date().getTime()}`);
+        try {
+          const { data: avatarData } = await supabase.storage
+            .from('avatars')
+            .getPublicUrl(`${user.id}`);
+            
+          if (avatarData) {
+            setAvatarUrl(`${avatarData.publicUrl}?t=${new Date().getTime()}`);
+          }
+        } catch (error) {
+          console.error("Error getting avatar:", error);
         }
         
         // Update state with loaded data
@@ -134,6 +140,7 @@ const ProfilePage = () => {
       console.log("Saving profile with:", {
         work_days: profile.workDays,
         study_days: profile.studyDays,
+        display_name: profile.displayName,
         // Other fields...
       });
       
@@ -187,22 +194,69 @@ const ProfilePage = () => {
         fitness: type === 'fitness' || type === 'both'
       };
       
+      const token = await supabase.auth.getSession().then(res => res.data.session?.access_token);
+      if (!token) throw new Error("Usuário não autenticado");
+      
       const { data, error } = await supabase.functions.invoke('google-integration', {
         body: { 
           action: 'auth',
           ...params
+        },
+        headers: {
+          Authorization: `Bearer ${token}`
         }
       });
       
+      console.log("Response from edge function:", data, error);
+      
       if (error) throw error;
+      if (!data?.authUrl) throw new Error("URL de autenticação não retornada");
       
       // Abrir janela para autenticação
       window.open(data.authUrl, '_blank', 'width=600,height=700');
       
     } catch (error: any) {
+      console.error("Integration error:", error);
       toast({
         title: "Erro na integração",
         description: error.message || "Não foi possível conectar ao Google",
+        variant: "destructive"
+      });
+    }
+  };
+  
+  const syncCalendar = async () => {
+    try {
+      const token = await supabase.auth.getSession().then(res => res.data.session?.access_token);
+      if (!token) throw new Error("Usuário não autenticado");
+      
+      const { data, error } = await supabase.functions.invoke('google-integration', {
+        body: { action: 'sync-calendar' },
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      console.log("Calendar sync response:", data, error);
+      
+      if (error) throw error;
+      
+      toast({
+        title: "Calendário sincronizado",
+        description: `${data?.eventsCount || 0} eventos foram sincronizados com sucesso`
+      });
+      
+      // Update last sync time
+      setIntegrations(prev => ({
+        ...prev,
+        lastSyncTime: new Date().toISOString()
+      }));
+      
+    } catch (error: any) {
+      console.error("Calendar sync error:", error);
+      toast({
+        title: "Erro na sincronização",
+        description: error.message || "Não foi possível sincronizar o calendário",
         variant: "destructive"
       });
     }
@@ -245,33 +299,29 @@ const ProfilePage = () => {
         throw new Error("Você precisa selecionar uma imagem.");
       }
       
+      setUploadingAvatar(true);
       const file = event.target.files[0];
-      const fileExt = file.name.split('.').pop();
       const filePath = `${user.id}`;
       
-      setUploadingAvatar(true);
-      
-      // Verificar se o bucket existe, se não, criá-lo
-      const { data: bucketData, error: bucketError } = await supabase.storage
-        .getBucket('avatars');
-        
-      if (bucketError && bucketError.message.includes('does not exist')) {
-        await supabase.storage.createBucket('avatars', {
-          public: true
-        });
+      // Check if bucket exists first
+      try {
+        const { error: storageError } = await supabase.storage
+          .from('avatars')
+          .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: true,
+          });
+          
+        if (storageError) throw storageError;
+      } catch (error: any) {
+        if (error.message.includes('Bucket not found')) {
+          console.log("Bucket not found, will be created automatically");
+        } else {
+          throw error;
+        }
       }
       
-      // Fazer upload do arquivo
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: true,
-        });
-        
-      if (uploadError) throw uploadError;
-      
-      // Obter URL pública
+      // Get public URL
       const { data } = await supabase.storage
         .from('avatars')
         .getPublicUrl(filePath);
@@ -283,6 +333,7 @@ const ProfilePage = () => {
         description: "Sua foto de perfil foi atualizada com sucesso"
       });
     } catch (error: any) {
+      console.error("Avatar upload error:", error);
       toast({
         title: "Erro ao atualizar avatar",
         description: error.message || "Falha ao fazer upload da imagem",
@@ -336,7 +387,7 @@ const ProfilePage = () => {
                     <Avatar className="h-24 w-24 border cursor-pointer hover:opacity-80 transition-opacity relative group" onClick={() => fileInputRef.current?.click()}>
                       <AvatarImage src={avatarUrl || ""} alt={profile.displayName} />
                       <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
-                        {profile.displayName.split(' ').map(n => n[0]).join('')}
+                        {profile.displayName?.split(' ').map(n => n[0]).join('') || ""}
                       </AvatarFallback>
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-full">
                         <Image className="h-8 w-8 text-white" />
@@ -618,13 +669,25 @@ const ProfilePage = () => {
                         </div>
                         <p className="text-sm text-muted-foreground">Sincronizar eventos com Google Agenda</p>
                       </div>
-                      <Button 
-                        variant={integrations.googleCalendarSync ? "default" : "outline"} 
-                        size="sm"
-                        onClick={() => startGoogleIntegration('calendar')}
-                      >
-                        {integrations.googleCalendarSync ? "Sincronizar" : "Conectar"}
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        {integrations.googleCalendarSync && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={syncCalendar}
+                          >
+                            <RefreshCw className="h-4 w-4 mr-1" />
+                            Sincronizar
+                          </Button>
+                        )}
+                        <Button 
+                          variant={integrations.googleCalendarSync ? "default" : "outline"} 
+                          size="sm"
+                          onClick={() => startGoogleIntegration('calendar')}
+                        >
+                          {integrations.googleCalendarSync ? "Sincronizado" : "Conectar"}
+                        </Button>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between">
                       <div>
@@ -639,7 +702,7 @@ const ProfilePage = () => {
                         size="sm"
                         onClick={() => startGoogleIntegration('fitness')}
                       >
-                        {integrations.googleFitnessSync ? "Sincronizar" : "Conectar"}
+                        {integrations.googleFitnessSync ? "Sincronizado" : "Conectar"}
                       </Button>
                     </div>
                     
