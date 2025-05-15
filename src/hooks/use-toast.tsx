@@ -20,12 +20,11 @@ interface ToastInfo {
   description?: string;
   action?: ToastActionElement;
   variant?: "default" | "destructive";
-  // Include other props that might be needed
   className?: string;
   duration?: number;
 }
 
-// Create a simple toast state manager
+// Create a simple toast store manager
 const useToastStore = () => {
   const [toasts, setToasts] = React.useState<ToastInfo[]>([]);
 
