@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, createRef } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,7 @@ const ProfilePage = () => {
   const [privacyDialogOpen, setPrivacyDialogOpen] = useState(false);
   
   // Referência para o input de arquivo oculto
-  const fileInputRef = React.createRef<HTMLInputElement>();
+  const fileInputRef = createRef<HTMLInputElement>();
   
   // Profile state
   const [profile, setProfile] = useState({
