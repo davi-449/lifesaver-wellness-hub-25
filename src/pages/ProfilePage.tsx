@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -11,15 +10,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { User, Settings, Bell, Shield, LogOut, Calendar, Activity } from "lucide-react";
+import { User, Settings, Bell, Shield, LogOut, Calendar, Activity, Image } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const ProfilePage = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [privacyDialogOpen, setPrivacyDialogOpen] = useState(false);
+  
+  // Referência para o input de arquivo oculto
+  const fileInputRef = React.createRef<HTMLInputElement>();
   
   // Profile state
   const [profile, setProfile] = useState({
@@ -70,6 +76,15 @@ const ProfilePage = () => {
           .eq('user_id', user.id)
           .maybeSingle();
         
+        // Check if user has avatar
+        const { data: avatarData } = await supabase.storage
+          .from('avatars')
+          .getPublicUrl(`${user.id}`);
+          
+        if (avatarData) {
+          setAvatarUrl(`${avatarData.publicUrl}?t=${new Date().getTime()}`);
+        }
+        
         // Update state with loaded data
         setProfile({
           displayName: profileData.display_name || "",
@@ -116,6 +131,12 @@ const ProfilePage = () => {
     
     setSaving(true);
     try {
+      console.log("Saving profile with:", {
+        work_days: profile.workDays,
+        study_days: profile.studyDays,
+        // Other fields...
+      });
+      
       const { error } = await supabase
         .from('profiles')
         .update({
@@ -217,6 +238,61 @@ const ProfilePage = () => {
     });
   };
   
+  // Upload de avatar
+  const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      if (!event.target.files || event.target.files.length === 0) {
+        throw new Error("Você precisa selecionar uma imagem.");
+      }
+      
+      const file = event.target.files[0];
+      const fileExt = file.name.split('.').pop();
+      const filePath = `${user.id}`;
+      
+      setUploadingAvatar(true);
+      
+      // Verificar se o bucket existe, se não, criá-lo
+      const { data: bucketData, error: bucketError } = await supabase.storage
+        .getBucket('avatars');
+        
+      if (bucketError && bucketError.message.includes('does not exist')) {
+        await supabase.storage.createBucket('avatars', {
+          public: true
+        });
+      }
+      
+      // Fazer upload do arquivo
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true,
+        });
+        
+      if (uploadError) throw uploadError;
+      
+      // Obter URL pública
+      const { data } = await supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+        
+      setAvatarUrl(`${data.publicUrl}?t=${new Date().getTime()}`);
+      
+      toast({
+        title: "Avatar atualizado",
+        description: "Sua foto de perfil foi atualizada com sucesso"
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao atualizar avatar",
+        description: error.message || "Falha ao fazer upload da imagem",
+        variant: "destructive"
+      });
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+  
   if (loading) {
     return (
       <AppLayout>
@@ -257,14 +333,29 @@ const ProfilePage = () => {
               <CardContent className="space-y-6">
                 <div className="flex flex-col md:flex-row gap-6">
                   <div className="flex flex-col items-center space-y-4">
-                    <Avatar className="h-24 w-24">
-                      <AvatarImage src="" alt={profile.displayName} />
+                    <Avatar className="h-24 w-24 border cursor-pointer hover:opacity-80 transition-opacity relative group" onClick={() => fileInputRef.current?.click()}>
+                      <AvatarImage src={avatarUrl || ""} alt={profile.displayName} />
                       <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
                         {profile.displayName.split(' ').map(n => n[0]).join('')}
                       </AvatarFallback>
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-full">
+                        <Image className="h-8 w-8 text-white" />
+                      </div>
                     </Avatar>
-                    <Button variant="outline" size="sm">
-                      Alterar Foto
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept="image/*"
+                      onChange={uploadAvatar}
+                      style={{ display: 'none' }}
+                    />
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingAvatar}
+                    >
+                      {uploadingAvatar ? "Carregando..." : "Alterar Foto"}
                     </Button>
                   </div>
                   <div className="flex-1 space-y-4">
@@ -497,19 +588,19 @@ const ProfilePage = () => {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="notif1">Lembretes de Tarefas</Label>
-                      <Switch id="notif1" checked />
+                      <Switch id="notif1" defaultChecked />
                     </div>
                     <div className="flex items-center justify-between">
                       <Label htmlFor="notif2">Lembretes de Hidratação</Label>
-                      <Switch id="notif2" checked />
+                      <Switch id="notif2" defaultChecked />
                     </div>
                     <div className="flex items-center justify-between">
                       <Label htmlFor="notif3">Lembretes de Treinos</Label>
-                      <Switch id="notif3" checked />
+                      <Switch id="notif3" defaultChecked />
                     </div>
                     <div className="flex items-center justify-between">
                       <Label htmlFor="notif4">Notificações de Calendário</Label>
-                      <Switch id="notif4" checked />
+                      <Switch id="notif4" defaultChecked />
                     </div>
                   </div>
                 </div>
@@ -563,7 +654,11 @@ const ProfilePage = () => {
                 <Separator />
                 
                 <div className="space-y-2">
-                  <Button variant="outline" className="w-full justify-start">
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start"
+                    onClick={() => setPrivacyDialogOpen(true)}
+                  >
                     <Shield className="mr-2 h-4 w-4" />
                     Privacidade e Segurança
                   </Button>
@@ -580,6 +675,116 @@ const ProfilePage = () => {
             </Card>
           </TabsContent>
         </Tabs>
+        
+        {/* Dialog de privacidade e segurança */}
+        <Dialog open={privacyDialogOpen} onOpenChange={setPrivacyDialogOpen}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Política de Privacidade e Segurança</DialogTitle>
+              <DialogDescription>
+                Última atualização: 15 de maio de 2025
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-6 text-sm">
+              <div>
+                <h3 className="text-lg font-semibold mb-2">1. Introdução</h3>
+                <p>
+                  Bem-vindo ao WellnessHub. Respeitamos sua privacidade e estamos comprometidos em proteger seus dados pessoais. 
+                  Esta política de privacidade explica como coletamos, usamos, processamos e compartilhamos suas informações.
+                </p>
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-semibold mb-2">2. Informações que coletamos</h3>
+                <p className="mb-2">Podemos coletar os seguintes tipos de informação:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Informações pessoais básicas (nome, e-mail)</li>
+                  <li>Dados de saúde e fitness (peso, altura, metas)</li>
+                  <li>Agendas e horários (rotina de trabalho e estudos)</li>
+                  <li>Dados de tarefas e compromissos</li>
+                  <li>Informações de integração com serviços como Google Calendar e Google Fit</li>
+                </ul>
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-semibold mb-2">3. Como usamos suas informações</h3>
+                <p className="mb-2">Usamos suas informações para:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Fornecer, personalizar e melhorar nossos serviços</li>
+                  <li>Processar e gerenciar suas tarefas, eventos e metas</li>
+                  <li>Sincronizar dados com serviços terceiros que você autorizou</li>
+                  <li>Enviar notificações relacionadas aos serviços</li>
+                  <li>Garantir a segurança da sua conta</li>
+                </ul>
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-semibold mb-2">4. Segurança de dados</h3>
+                <p>
+                  Implementamos medidas de segurança técnicas e organizacionais apropriadas para proteger suas informações pessoais.
+                  Todos os dados são armazenados com criptografia e seguem as melhores práticas do setor. O acesso aos seus dados é
+                  estritamente controlado e limitado apenas ao necessário para fornecer os serviços.
+                </p>
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-semibold mb-2">5. Compartilhamento de informações</h3>
+                <p>
+                  Não vendemos suas informações pessoais. Compartilhamos suas informações apenas nas seguintes circunstâncias:
+                </p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Com provedores de serviços terceirizados que nos ajudam a oferecer nossos serviços</li>
+                  <li>Com serviços de integração que você autorizar explicitamente (como Google)</li>
+                  <li>Quando necessário por lei, processo legal ou para proteger seus interesses vitais</li>
+                </ul>
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-semibold mb-2">6. Seus direitos</h3>
+                <p className="mb-2">Você tem diversos direitos relacionados aos seus dados pessoais:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Direito de acesso aos seus dados</li>
+                  <li>Direito à retificação de dados incompletos ou imprecisos</li>
+                  <li>Direito ao esquecimento (apagar seus dados)</li>
+                  <li>Direito à portabilidade dos dados</li>
+                  <li>Direito de objeção ao processamento dos seus dados</li>
+                  <li>Direito de revogar o consentimento a qualquer momento</li>
+                </ul>
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-semibold mb-2">7. Retenção de dados</h3>
+                <p>
+                  Mantemos suas informações pessoais apenas pelo tempo necessário para os propósitos estabelecidos nesta Política
+                  de Privacidade, a menos que um período de retenção mais longo seja exigido ou permitido por lei.
+                </p>
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-semibold mb-2">8. Alterações nesta política</h3>
+                <p>
+                  Podemos atualizar nossa Política de Privacidade periodicamente. Notificaremos você sobre quaisquer alterações
+                  publicando a nova Política de Privacidade nesta página e atualizando a data "última atualização" no topo.
+                </p>
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-semibold mb-2">9. Entre em contato</h3>
+                <p>
+                  Se você tiver dúvidas sobre esta Política de Privacidade ou nossas práticas de proteção de dados, entre em contato
+                  conosco em: privacy@wellnesshub.com
+                </p>
+              </div>
+            </div>
+            
+            <div className="mt-6 flex justify-end">
+              <Button onClick={() => setPrivacyDialogOpen(false)}>
+                Entendi
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppLayout>
   );

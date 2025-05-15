@@ -1,357 +1,312 @@
 
 import { useState, useEffect } from "react";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogFooter,
-  DialogClose
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Calendar as CalendarIcon, Trash2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Task, Category, Priority, TaskStatus } from "@/types";
-import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/components/ui/use-toast";
 
 interface TaskModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   task?: Task;
   mode: 'create' | 'edit';
-  onSuccess: () => void;
+  onSuccess?: () => void;
 }
 
-export function TaskModal({ open, onOpenChange, task, mode, onSuccess }: TaskModalProps) {
+export const TaskModal = ({ open, onOpenChange, task, mode, onSuccess }: TaskModalProps) => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
-  const [category, setCategory] = useState<string>("work");
+  const [openDatePicker, setOpenDatePicker] = useState(false);
+  const [categoryId, setCategoryId] = useState<string>("");
   const [priority, setPriority] = useState<Priority>("medium");
   const [status, setStatus] = useState<TaskStatus>("pending");
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [deleteAlertOpen, setDeleteAlertOpen] = useState(false);
-
+  
+  // Carregar categorias disponíveis
   useEffect(() => {
-    // Carregar categorias do usuário
-    const loadCategories = async () => {
+    const fetchCategories = async () => {
       try {
         const { data, error } = await supabase
           .from('categories')
           .select('*');
-        
+          
         if (error) throw error;
+        
         if (data) {
-          // Convertendo explicitamente para o tipo Category
-          const typedCategories: Category[] = data.map(item => ({
-            id: item.id,
-            name: item.name,
-            color: item.color,
-            user_id: item.user_id,
-            created_at: item.created_at,
-            updated_at: item.updated_at
+          // Convertendo para o formato Category
+          const formattedCategories = data.map(cat => ({
+            id: cat.id,
+            name: cat.name,
+            color: cat.color,
+            created_at: cat.created_at,
+            updated_at: cat.updated_at,
+            user_id: cat.user_id
           }));
-          setCategories(typedCategories);
+          setCategories(formattedCategories);
         }
       } catch (error) {
         console.error('Erro ao carregar categorias:', error);
-        toast({
-          title: "Erro ao carregar categorias",
-          description: "Não foi possível carregar suas categorias.",
-          variant: "destructive"
-        });
       }
     };
-
+    
     if (open) {
-      loadCategories();
+      fetchCategories();
     }
   }, [open]);
-
-  // Preencher o formulário quando estiver em modo de edição
+  
+  // Preencher os dados da tarefa se estivermos editando
   useEffect(() => {
     if (task && mode === 'edit') {
       setTitle(task.title);
       setDescription(task.description || "");
       setDueDate(task.dueDate);
-      setCategory(task.category || "work");
+      setCategoryId(task.category_id || "");
       setPriority(task.priority);
       setStatus(task.status);
     } else {
-      // Valores padrão para nova tarefa
+      // Resetar formulário para criar uma nova tarefa
       setTitle("");
       setDescription("");
       setDueDate(undefined);
-      setCategory("work");
+      setCategoryId("");
       setPriority("medium");
       setStatus("pending");
     }
   }, [task, mode, open]);
-
-  const handleSubmit = async () => {
+  
+  const handleSave = async () => {
     if (!title.trim()) {
       toast({
-        title: "Campo obrigatório",
+        title: "Erro",
         description: "O título da tarefa é obrigatório.",
         variant: "destructive"
       });
       return;
     }
-
-    setIsLoading(true);
-
+    
     try {
-      const categoryObj = categories.find(c => c.name === category);
-      const userId = (await supabase.auth.getUser()).data.user?.id;
+      setLoading(true);
       
-      if (!userId) {
-        throw new Error("Usuário não autenticado");
-      }
+      // Formatando a data (apenas se existir)
+      const formattedDate = dueDate ? dueDate.toISOString() : null;
       
       if (mode === 'create') {
+        // Buscar o ID do usuário atual
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
+          throw new Error("Usuário não autenticado");
+        }
+        
         // Criar nova tarefa
         const { error } = await supabase
           .from('tasks')
           .insert({
             title,
-            description: description || null,
-            due_date: dueDate?.toISOString() || null,
-            category_id: categoryObj?.id || null,
+            description,
+            due_date: formattedDate,
+            category_id: categoryId || null,
             priority,
             status,
-            user_id: userId
+            user_id: user.id
           });
-
+          
         if (error) throw error;
-
+        
         toast({
           title: "Tarefa criada",
-          description: "Sua tarefa foi criada com sucesso!"
+          description: "Sua tarefa foi criada com sucesso."
         });
-      } else if (task?.id) {
-        // Atualizar tarefa existente
+      } else if (mode === 'edit' && task) {
+        // Editar tarefa existente
         const { error } = await supabase
           .from('tasks')
           .update({
             title,
-            description: description || null,
-            due_date: dueDate?.toISOString() || null,
-            category_id: categoryObj?.id || null,
+            description,
+            due_date: formattedDate,
+            category_id: categoryId || null,
             priority,
             status
           })
           .eq('id', task.id);
-
+          
         if (error) throw error;
-
+        
         toast({
           title: "Tarefa atualizada",
-          description: "Sua tarefa foi atualizada com sucesso!"
+          description: "Sua tarefa foi atualizada com sucesso."
         });
       }
-
-      onSuccess();
+      
+      // Fechar modal e notificar sucesso
       onOpenChange(false);
-    } catch (error) {
+      if (onSuccess) onSuccess();
+      
+    } catch (error: any) {
       console.error('Erro ao salvar tarefa:', error);
       toast({
-        title: "Erro ao salvar tarefa",
-        description: "Não foi possível salvar sua tarefa. Tente novamente.",
+        title: "Erro",
+        description: error.message || "Ocorreu um erro ao salvar a tarefa.",
         variant: "destructive"
       });
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
-
+  
   const handleDelete = async () => {
-    if (!task?.id) return;
-    
-    setIsLoading(true);
+    if (!task) return;
     
     try {
+      setLoading(true);
+      
       const { error } = await supabase
         .from('tasks')
         .delete()
         .eq('id', task.id);
-      
+        
       if (error) throw error;
       
       toast({
         title: "Tarefa excluída",
-        description: "Sua tarefa foi excluída com sucesso!"
+        description: "Sua tarefa foi excluída com sucesso."
       });
       
-      onSuccess();
+      // Fechar modal e notificar sucesso
       onOpenChange(false);
-    } catch (error) {
+      if (onSuccess) onSuccess();
+      
+    } catch (error: any) {
       console.error('Erro ao excluir tarefa:', error);
       toast({
-        title: "Erro ao excluir tarefa",
-        description: "Não foi possível excluir sua tarefa. Tente novamente.",
+        title: "Erro",
+        description: error.message || "Ocorreu um erro ao excluir a tarefa.",
         variant: "destructive"
       });
     } finally {
-      setIsLoading(false);
-      setDeleteAlertOpen(false);
+      setLoading(false);
     }
   };
-
-  // Função para obter label legível para uma categoria
-  const getCategoryLabel = (categoryName: string) => {
-    switch (categoryName) {
-      case "work": return "Trabalho";
-      case "study": return "Estudos";
-      case "fitness": return "Fitness";
-      case "personal": return "Pessoal";
-      default: return categoryName;
-    }
-  };
-
+  
   return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>
-              {mode === 'create' ? 'Nova tarefa' : 'Editar tarefa'}
-            </DialogTitle>
-          </DialogHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[500px] p-0">
+        <DialogHeader className="p-6 pb-2">
+          <DialogTitle>{mode === 'create' ? 'Criar Nova Tarefa' : 'Editar Tarefa'}</DialogTitle>
+        </DialogHeader>
+        
+        <div className="p-6 pt-2 space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="title">Título</Label>
+            <Input
+              id="title"
+              placeholder="Título da tarefa"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
           
-          <div className="space-y-4 py-4">
-            <div>
-              <label htmlFor="title" className="text-sm font-medium block mb-1">
-                Título
-              </label>
-              <Input
-                id="title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Título da tarefa"
-              />
+          <div className="space-y-2">
+            <Label htmlFor="description">Descrição (opcional)</Label>
+            <Textarea
+              id="description"
+              placeholder="Descrição da tarefa"
+              className="resize-none"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+          
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="due-date">Data de vencimento</Label>
+              <Popover open={openDatePicker} onOpenChange={setOpenDatePicker}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dueDate ? (
+                      format(dueDate, "PPP", { locale: ptBR })
+                    ) : (
+                      <span className="text-muted-foreground">Selecione uma data</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={dueDate}
+                    onSelect={(date) => {
+                      setDueDate(date);
+                      setOpenDatePicker(false);
+                    }}
+                    initialFocus
+                    locale={ptBR}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
             
-            <div>
-              <label htmlFor="description" className="text-sm font-medium block mb-1">
-                Descrição
-              </label>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Descrição (opcional)"
-                rows={3}
-              />
-            </div>
-            
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="dueDate" className="text-sm font-medium block mb-1">
-                  Data de vencimento
-                </label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start text-left font-normal"
+            <div className="space-y-2">
+              <Label htmlFor="category">Categoria</Label>
+              <Select value={categoryId} onValueChange={setCategoryId}>
+                <SelectTrigger id="category">
+                  <SelectValue placeholder="Selecione uma categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem 
+                      key={category.id} 
+                      value={category.id}
+                      className="flex items-center gap-2"
                     >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {dueDate ? (
-                        format(dueDate, "PPP", { locale: ptBR })
-                      ) : (
-                        <span>Selecionar data</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <Calendar
-                      mode="single"
-                      selected={dueDate}
-                      onSelect={setDueDate}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-              
-              <div>
-                <label htmlFor="category" className="text-sm font-medium block mb-1">
-                  Categoria
-                </label>
-                <Select value={category} onValueChange={setCategory}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a categoria" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.name.toString()}>
-                        <div className="flex items-center">
-                          <span
-                            className="w-3 h-3 rounded-full mr-2"
-                            style={{ backgroundColor: cat.color }}
-                          />
-                          {getCategoryLabel(cat.name.toString())}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: category.color }}></span>
+                      <span>{category.name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="priority">Prioridade</Label>
+              <Select value={priority} onValueChange={(value) => setPriority(value as Priority)}>
+                <SelectTrigger id="priority">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Baixa</SelectItem>
+                  <SelectItem value="medium">Média</SelectItem>
+                  <SelectItem value="high">Alta</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="priority" className="text-sm font-medium block mb-1">
-                  Prioridade
-                </label>
-                <Select value={priority} onValueChange={(value: Priority) => setPriority(value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a prioridade" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="high">Alta</SelectItem>
-                    <SelectItem value="medium">Média</SelectItem>
-                    <SelectItem value="low">Baixa</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div>
-                <label htmlFor="status" className="text-sm font-medium block mb-1">
-                  Status
-                </label>
-                <Select value={status} onValueChange={(value: TaskStatus) => setStatus(value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o status" />
+            {mode === 'edit' && (
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select value={status} onValueChange={(value) => setStatus(value as TaskStatus)}>
+                  <SelectTrigger id="status">
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pending">Pendente</SelectItem>
@@ -360,60 +315,35 @@ export function TaskModal({ open, onOpenChange, task, mode, onSuccess }: TaskMod
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-          </div>
-          
-          <DialogFooter className={cn("flex items-center", mode === 'edit' && "justify-between")}>
-            {mode === 'edit' && (
-              <Button 
-                type="button" 
-                variant="destructive"
-                onClick={() => setDeleteAlertOpen(true)}
-                disabled={isLoading}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Excluir
-              </Button>
             )}
-            
-            <div className="flex space-x-2">
-              <DialogClose asChild>
-                <Button type="button" variant="outline" disabled={isLoading}>
-                  Cancelar
-                </Button>
-              </DialogClose>
-              <Button 
-                type="button" 
-                onClick={handleSubmit} 
-                disabled={isLoading}
-              >
-                {isLoading ? "Salvando..." : mode === 'create' ? "Criar" : "Salvar"}
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={deleteAlertOpen} onOpenChange={setDeleteAlertOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Tarefa</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja excluir esta tarefa? Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              disabled={isLoading}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          </div>
+        </div>
+        
+        <DialogFooter className="px-6 pb-6 pt-2">
+          {mode === 'edit' && (
+            <Button 
+              variant="destructive" 
+              onClick={handleDelete} 
+              disabled={loading}
+              className="mr-auto"
             >
-              {isLoading ? "Excluindo..." : "Excluir"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+              Excluir
+            </Button>
+          )}
+          
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+            Cancelar
+          </Button>
+          
+          <Button onClick={handleSave} disabled={loading}>
+            {loading ? (
+              <div className="animate-spin h-5 w-5 border-2 border-current border-t-transparent rounded-full"></div>
+            ) : (
+              mode === 'create' ? 'Criar' : 'Salvar'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
-}
+};

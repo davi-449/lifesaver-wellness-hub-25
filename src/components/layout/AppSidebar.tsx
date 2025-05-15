@@ -1,136 +1,102 @@
 
-import { useState, useEffect } from "react";
-import { NavLink } from "react-router-dom";
-import { 
-  Calendar,
-  LayoutDashboard, 
-  List, 
-  Dumbbell, 
-  User, 
-  Menu, 
-  X 
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import React from "react";
+import { Link, useLocation } from "react-router-dom";
+import { Home, ListTodo, Calendar, DumbellIcon, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useIsMobile } from "@/hooks/use-mobile";
 
-export function AppSidebar() {
-  const isMobile = useIsMobile();
-  const [collapsed, setCollapsed] = useState(isMobile);
-  const [mobileOpen, setMobileOpen] = useState(false);
+interface SidebarProps {
+  isMobile: boolean;
+  isOpen: boolean;
+  setIsOpen: (isOpen: boolean) => void;
+}
 
-  // Ajuste automático ao alterar entre mobile e desktop
-  useEffect(() => {
-    setCollapsed(isMobile);
-  }, [isMobile]);
-
-  // Fechar o menu ao clicar em um item no mobile
-  const handleNavigation = () => {
-    if (isMobile) {
-      setMobileOpen(false);
-    }
-  };
-
-  const menuItems = [
+export const Sidebar = ({ isMobile, isOpen, setIsOpen }: SidebarProps) => {
+  const location = useLocation();
+  
+  const items = [
     {
       title: "Dashboard",
-      path: "/",
-      icon: LayoutDashboard,
+      href: "/",
+      icon: Home,
     },
     {
       title: "Tarefas",
-      path: "/tasks",
-      icon: List,
+      href: "/tasks",
+      icon: ListTodo,
     },
     {
       title: "Agenda",
-      path: "/calendar",
+      href: "/calendar",
       icon: Calendar,
     },
     {
       title: "Fitness",
-      path: "/fitness",
-      icon: Dumbbell,
+      href: "/fitness",
+      icon: DumbellIcon,
     },
     {
       title: "Perfil",
-      path: "/profile",
+      href: "/profile",
       icon: User,
     },
   ];
 
+  const isActive = (href: string) => {
+    return location.pathname === href;
+  };
+
   return (
     <>
-      {isMobile && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="fixed top-4 left-4 z-50"
-          onClick={() => setMobileOpen(!mobileOpen)}
-        >
-          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </Button>
+      {/* Overlay for mobile */}
+      {isMobile && isOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-background/80 backdrop-blur-sm"
+          onClick={() => setIsOpen(false)}
+        />
       )}
-      
-      <div 
+
+      {/* Sidebar */}
+      <div
         className={cn(
-          "fixed inset-0 bg-background/80 backdrop-blur-sm z-30",
-          isMobile ? (mobileOpen ? "block" : "hidden") : "hidden"
-        )}
-        onClick={() => setMobileOpen(false)}
-      />
-      
-      <aside 
-        className={cn(
-          "fixed left-0 top-0 bottom-0 bg-background border-r border-border shadow-lg z-40 transition-all duration-300 ease-in-out h-full",
-          collapsed && !isMobile ? "w-16" : "w-64",
-          isMobile ? (mobileOpen ? "translate-x-0" : "translate-x-[-100%]") : "translate-x-0"
+          "fixed top-0 left-0 z-40 h-screen w-64 flex-shrink-0 flex-col border-r bg-background transition-transform duration-300 ease-in-out",
+          isMobile ? "transform" : "",
+          isOpen ? "translate-x-0" : isMobile ? "-translate-x-full" : "translate-x-0"
         )}
       >
-        <div className="flex items-center justify-between p-4 h-14 border-b">
-          <h1 className={cn("text-xl font-bold text-primary transition-opacity duration-300", 
-                           collapsed && !isMobile ? "opacity-0" : "opacity-100")}>
+        {/* Sidebar header */}
+        <div className="flex h-16 items-center justify-between border-b px-4">
+          <Link to="/" className="flex items-center gap-2 font-semibold text-xl text-primary">
             WellnessHub
-          </h1>
-          {!isMobile && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setCollapsed(!collapsed)}
-              className="text-muted-foreground hover:bg-muted hover:text-foreground"
+          </Link>
+          {isMobile && (
+            <button
+              onClick={() => setIsOpen(false)}
+              className="rounded-md p-2 hover:bg-accent"
             >
-              {collapsed ? <Menu className="h-5 w-5" /> : <X className="h-5 w-5" />}
-            </Button>
+              <X className="h-5 w-5" />
+            </button>
           )}
         </div>
-        
-        <nav className="p-2 space-y-1 mt-2">
-          {menuItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={({ isActive }) => cn(
-                "flex items-center px-3 py-2 rounded-md transition-colors relative group",
-                isActive 
-                  ? "bg-primary/10 text-primary font-medium" 
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+
+        {/* Sidebar content */}
+        <div className="flex flex-col gap-2 p-4">
+          {items.map((item) => (
+            <Link
+              key={item.href}
+              to={item.href}
+              className={cn(
+                "group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent",
+                isActive(item.href)
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                  : "text-muted-foreground hover:text-foreground"
               )}
-              onClick={handleNavigation}
-              end={item.path === "/"}
             >
-              <item.icon className={cn("h-5 w-5", collapsed && !isMobile && "mx-auto")} />
-              {(!collapsed || isMobile) && <span className="ml-3">{item.title}</span>}
-              
-              {/* Tooltip para menu colapsado */}
-              {collapsed && !isMobile && (
-                <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground rounded-md text-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                  {item.title}
-                </div>
-              )}
-            </NavLink>
+              <item.icon className="h-5 w-5" />
+              {item.title}
+            </Link>
           ))}
-        </nav>
-      </aside>
+        </div>
+      </div>
     </>
   );
-}
+};
