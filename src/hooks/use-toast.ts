@@ -1,5 +1,5 @@
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 export type ToastProps = {
   id?: string;
@@ -164,9 +164,6 @@ export function toast({ ...props }: ToastProps) {
       ...props,
       id,
       open: true,
-      onOpenChange: (open: boolean) => {
-        if (!open) dismiss();
-      },
     },
   });
 
@@ -180,7 +177,7 @@ export function toast({ ...props }: ToastProps) {
 export function useToast() {
   const [state, setState] = useState<State>(memoryState);
 
-  useState(() => {
+  useEffect(() => {
     listeners.push(setState);
     return () => {
       const index = listeners.indexOf(setState);
@@ -188,7 +185,7 @@ export function useToast() {
         listeners.splice(index, 1);
       }
     };
-  });
+  }, []);
 
   return {
     ...state,
