@@ -9,11 +9,13 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      setSidebarOpen(!mobile);
     };
     
     window.addEventListener('resize', handleResize);
@@ -26,7 +28,8 @@ export function AppLayout({ children }: AppLayoutProps) {
       <main className={cn(
         "flex-1 transition-all duration-300 ease-in-out",
         isMobile ? "px-4 pt-16 pb-4" : "p-6",
-        isMobile ? "w-full" : (sidebarOpen ? "ml-64" : "ml-16")
+        isMobile ? "w-full" : "ml-16",
+        !isMobile && sidebarOpen && "ml-64"
       )}>
         {children}
       </main>
