@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Plus, Search, X } from "lucide-react";
@@ -8,81 +8,88 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Task, Priority, Category, TaskStatus } from "@/types";
+import { TaskModal } from "@/components/tasks/TaskModal";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/components/ui/use-toast";
 
 const TasksPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | undefined>(undefined);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
 
-  // Mock data
-  const mockTasks: Task[] = [
-    {
-      id: "1",
-      title: "Reunião de equipe",
-      description: "Discutir os próximos passos do projeto",
-      dueDate: new Date(2025, 4, 15, 10, 0),
-      category: "work",
-      priority: "high",
-      status: "pending",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: "2",
-      title: "Enviar relatório semanal",
-      description: "Compilar dados e enviar para gerência",
-      dueDate: new Date(2025, 4, 15, 14, 30),
-      category: "work",
-      priority: "medium",
-      status: "pending",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: "3",
-      title: "Treino de pernas",
-      description: "Foco em agachamentos e leg press",
-      dueDate: new Date(2025, 4, 15, 18, 0),
-      category: "fitness",
-      priority: "medium",
-      status: "pending",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: "4",
-      title: "Leitura do capítulo 5",
-      description: "Preparar para discussão na aula",
-      dueDate: new Date(2025, 4, 16, 10, 0),
-      category: "study",
-      priority: "high",
-      status: "pending",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: "5",
-      title: "Comprar presentes",
-      description: "Aniversário da mãe no domingo",
-      dueDate: new Date(2025, 4, 17, 12, 0),
-      category: "personal",
-      priority: "low",
-      status: "in-progress",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: "6",
-      title: "Atualizar currículo",
-      description: "",
-      dueDate: new Date(2025, 4, 20, 16, 0),
-      category: "personal",
-      priority: "medium",
-      status: "completed",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-  ];
+  // Carregar tarefas e categorias
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        // Carregar categorias
+        const { data: categoriesData, error: categoriesError } = await supabase
+          .from('categories')
+          .select('*');
+        
+        if (categoriesError) throw categoriesError;
+        
+        // Carregar tarefas
+        const { data: tasksData, error: tasksError } = await supabase
+          .from('tasks')
+          .select(`
+            *,
+            categories:category_id (*)
+          `);
+          
+        if (tasksError) throw tasksError;
+        
+        // Converter os dados do Supabase para o formato esperado pelo componente
+        const formattedTasks: Task[] = tasksData.map(task => ({
+          id: task.id,
+          title: task.title,
+          description: task.description,
+          dueDate: task.due_date ? new Date(task.due_date) : undefined,
+          category: task.categories?.name || 'work',
+          priority: task.priority as Priority,
+          status: task.status as TaskStatus,
+          createdAt: new Date(task.created_at),
+          updatedAt: new Date(task.updated_at),
+        }));
+        
+        setTasks(formattedTasks);
+        setCategories(categoriesData || []);
+      } catch (error) {
+        console.error('Erro ao carregar dados:', error);
+        toast({
+          title: "Erro ao carregar dados",
+          description: "Não foi possível carregar suas tarefas e categorias.",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchData();
+    
+    // Configurar listener para atualizações em tempo real
+    const channel = supabase
+      .channel('tasks-changes')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'tasks' 
+      }, () => {
+        fetchData();
+      })
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('pt-BR', {
@@ -93,12 +100,13 @@ const TasksPage = () => {
     });
   };
 
-  const getCategoryLabel = (category: Category) => {
-    switch (category) {
+  const getCategoryLabel = (categoryName: string) => {
+    switch (categoryName) {
       case "work": return "Trabalho";
       case "study": return "Estudos";
       case "fitness": return "Fitness";
       case "personal": return "Pessoal";
+      default: return categoryName;
     }
   };
 
@@ -130,9 +138,84 @@ const TasksPage = () => {
     });
   };
 
-  const pendingTasks = filterTasks(mockTasks, "pending");
-  const inProgressTasks = filterTasks(mockTasks, "in-progress");
-  const completedTasks = filterTasks(mockTasks, "completed");
+  const pendingTasks = filterTasks(tasks, "pending");
+  const inProgressTasks = filterTasks(tasks, "in-progress");
+  const completedTasks = filterTasks(tasks, "completed");
+
+  const handleEditTask = (task: Task) => {
+    setSelectedTask(task);
+    setModalMode('edit');
+    setModalOpen(true);
+  };
+
+  const handleCreateTask = () => {
+    setSelectedTask(undefined);
+    setModalMode('create');
+    setModalOpen(true);
+  };
+
+  const handleTaskStatusChange = async (task: Task, newStatus: TaskStatus) => {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ status: newStatus })
+        .eq('id', task.id);
+      
+      if (error) throw error;
+      
+      toast({
+        title: `Tarefa ${newStatus === 'completed' ? 'concluída' : 'atualizada'}`,
+        description: `A tarefa "${task.title}" foi ${newStatus === 'completed' ? 'marcada como concluída' : 'atualizada'}.`
+      });
+      
+      // Atualização local para feedback imediato
+      setTasks(tasks.map(t => 
+        t.id === task.id ? { ...t, status: newStatus } : t
+      ));
+    } catch (error) {
+      console.error('Erro ao atualizar status da tarefa:', error);
+      toast({
+        title: "Erro ao atualizar tarefa",
+        description: "Não foi possível atualizar o status da tarefa. Tente novamente.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const renderTaskCard = (task: Task, actions: React.ReactNode) => (
+    <div
+      key={task.id}
+      className={`task-card priority-${task.priority}`}
+    >
+      <div className="flex justify-between">
+        <h3 className="font-medium">{task.title}</h3>
+        <span className="text-sm">{task.dueDate ? formatDate(task.dueDate) : "Sem data"}</span>
+      </div>
+      {task.description && (
+        <p className="text-sm text-muted-foreground mt-2">{task.description}</p>
+      )}
+      <div className="flex items-center justify-between mt-4">
+        <div className="flex gap-2">
+          <Badge variant="outline" className={`category-${task.category}`}>
+            {getCategoryLabel(task.category)}
+          </Badge>
+          <Badge variant="outline">
+            Prioridade: {getPriorityLabel(task.priority)}
+          </Badge>
+        </div>
+        <div className="flex gap-2">
+          <Button 
+            size="sm" 
+            variant="outline"
+            onClick={() => handleEditTask(task)}
+          >
+            Editar
+          </Button>
+          {actions}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <AppLayout>
@@ -144,7 +227,7 @@ const TasksPage = () => {
               Gerencie suas tarefas e acompanhe seu progresso
             </p>
           </div>
-          <Button className="sm:self-end">
+          <Button className="sm:self-end" onClick={handleCreateTask}>
             <Plus className="mr-2 h-4 w-4" />
             Nova Tarefa
           </Button>
@@ -209,38 +292,17 @@ const TasksPage = () => {
           </TabsList>
           <TabsContent value="pending" className="mt-6">
             <div className="space-y-4">
-              {pendingTasks.length > 0 ? (
-                pendingTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className={`task-card priority-${task.priority}`}
+              {isLoading ? (
+                <div className="text-center py-8">Carregando tarefas...</div>
+              ) : pendingTasks.length > 0 ? (
+                pendingTasks.map((task) => renderTaskCard(
+                  task,
+                  <Button 
+                    size="sm"
+                    onClick={() => handleTaskStatusChange(task, "in-progress")}
                   >
-                    <div className="flex justify-between">
-                      <h3 className="font-medium">{task.title}</h3>
-                      <span className="text-sm">{formatDate(task.dueDate!)}</span>
-                    </div>
-                    {task.description && (
-                      <p className="text-sm text-muted-foreground mt-2">{task.description}</p>
-                    )}
-                    <div className="flex items-center justify-between mt-4">
-                      <div className="flex gap-2">
-                        <Badge variant="outline" className={`category-${task.category}`}>
-                          {getCategoryLabel(task.category)}
-                        </Badge>
-                        <Badge variant="outline">
-                          Prioridade: {getPriorityLabel(task.priority)}
-                        </Badge>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline">
-                          Editar
-                        </Button>
-                        <Button size="sm">
-                          Iniciar
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
+                    Iniciar
+                  </Button>
                 ))
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
@@ -251,38 +313,17 @@ const TasksPage = () => {
           </TabsContent>
           <TabsContent value="in-progress" className="mt-6">
             <div className="space-y-4">
-              {inProgressTasks.length > 0 ? (
-                inProgressTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className={`task-card priority-${task.priority}`}
+              {isLoading ? (
+                <div className="text-center py-8">Carregando tarefas...</div>
+              ) : inProgressTasks.length > 0 ? (
+                inProgressTasks.map((task) => renderTaskCard(
+                  task,
+                  <Button 
+                    size="sm"
+                    onClick={() => handleTaskStatusChange(task, "completed")}
                   >
-                    <div className="flex justify-between">
-                      <h3 className="font-medium">{task.title}</h3>
-                      <span className="text-sm">{formatDate(task.dueDate!)}</span>
-                    </div>
-                    {task.description && (
-                      <p className="text-sm text-muted-foreground mt-2">{task.description}</p>
-                    )}
-                    <div className="flex items-center justify-between mt-4">
-                      <div className="flex gap-2">
-                        <Badge variant="outline" className={`category-${task.category}`}>
-                          {getCategoryLabel(task.category)}
-                        </Badge>
-                        <Badge variant="outline">
-                          Prioridade: {getPriorityLabel(task.priority)}
-                        </Badge>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline">
-                          Editar
-                        </Button>
-                        <Button size="sm">
-                          Concluir
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
+                    Concluir
+                  </Button>
                 ))
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
@@ -293,38 +334,18 @@ const TasksPage = () => {
           </TabsContent>
           <TabsContent value="completed" className="mt-6">
             <div className="space-y-4">
-              {completedTasks.length > 0 ? (
-                completedTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className={`task-card priority-${task.priority} opacity-75`}
+              {isLoading ? (
+                <div className="text-center py-8">Carregando tarefas...</div>
+              ) : completedTasks.length > 0 ? (
+                completedTasks.map((task) => renderTaskCard(
+                  task,
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => handleTaskStatusChange(task, "pending")}
                   >
-                    <div className="flex justify-between">
-                      <h3 className="font-medium">{task.title}</h3>
-                      <span className="text-sm">{formatDate(task.dueDate!)}</span>
-                    </div>
-                    {task.description && (
-                      <p className="text-sm text-muted-foreground mt-2">{task.description}</p>
-                    )}
-                    <div className="flex items-center justify-between mt-4">
-                      <div className="flex gap-2">
-                        <Badge variant="outline" className={`category-${task.category}`}>
-                          {getCategoryLabel(task.category)}
-                        </Badge>
-                        <Badge variant="outline">
-                          Prioridade: {getPriorityLabel(task.priority)}
-                        </Badge>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline">
-                          Reativar
-                        </Button>
-                        <Button size="sm" variant="destructive">
-                          Remover
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
+                    Reativar
+                  </Button>
                 ))
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
@@ -335,6 +356,17 @@ const TasksPage = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      <TaskModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        task={selectedTask}
+        mode={modalMode}
+        onSuccess={() => {
+          // Recarregar dados após criar/editar tarefa
+          // Não é necessário fazer nada aqui pois o listener em tempo real cuidará disso
+        }}
+      />
     </AppLayout>
   );
 };
