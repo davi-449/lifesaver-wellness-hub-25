@@ -1,6 +1,6 @@
 
 import * as React from "react";
-import { toast as sonnerToast, type ToastT } from "sonner";
+import { toast as sonnerToast } from "sonner";
 import {
   ToastActionElement,
   ToastProps,
@@ -13,9 +13,16 @@ type ToastOptions = ToastProps & {
   action?: ToastActionElement;
 };
 
-// Create a type for our toast store
-interface ToastInfo extends ToastOptions {
-  id: string | number;
+// Create a type for our toast store but don't extend ToastOptions directly
+interface ToastInfo {
+  id: string;
+  title?: string;
+  description?: string;
+  action?: ToastActionElement;
+  variant?: "default" | "destructive";
+  // Include other props that might be needed
+  className?: string;
+  duration?: number;
 }
 
 // Create a simple toast state manager
@@ -26,7 +33,7 @@ const useToastStore = () => {
     setToasts((current) => [...current, toast]);
   };
 
-  const removeToast = (id: string | number) => {
+  const removeToast = (id: string) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));
   };
 
@@ -49,13 +56,15 @@ const toast = ({ title, description, action, ...props }: ToastOptions) => {
     }
   );
   
-  // Add toast to our store
+  // Add toast to our store - ensure the id is a string
   toastStore.addToast({
-    id,
+    id: id.toString(),
     title,
     description,
     action,
-    ...props,
+    variant: props.variant,
+    className: props.className,
+    duration: props.duration,
   });
   
   return id;
@@ -66,7 +75,7 @@ function useToast() {
     toast,
     dismiss: (id?: string | number) => {
       if (id) {
-        toastStore.removeToast(id);
+        toastStore.removeToast(id.toString());
       }
       return sonnerToast.dismiss(id);
     },
