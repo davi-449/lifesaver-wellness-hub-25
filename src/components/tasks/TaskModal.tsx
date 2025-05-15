@@ -4,15 +4,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Task, Category } from "@/types";
+import { CalendarIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Task, Category, Priority, TaskStatus } from "@/types";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
 
@@ -25,192 +25,260 @@ interface TaskModalProps {
 }
 
 export const TaskModal = ({ open, onOpenChange, task, mode, onSuccess }: TaskModalProps) => {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
+  const [openDatePicker, setOpenDatePicker] = useState(false);
+  const [categoryId, setCategoryId] = useState<string>("");
+  const [priority, setPriority] = useState<Priority>("medium");
+  const [status, setStatus] = useState<TaskStatus>("pending");
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
-    task?.dueDate || undefined
-  );
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    priority: "medium",
-    category_id: "",
-    status: "pending"
-  });
-
+  
+  // Carregar categorias disponíveis
   useEffect(() => {
-    // Reset form when modal opens/closes or task changes
-    if (open && task && mode === 'edit') {
-      setFormData({
-        title: task.title,
-        description: task.description || "",
-        priority: task.priority,
-        category_id: task.category_id || "",
-        status: task.status
-      });
-      setSelectedDate(task.dueDate);
-    } else if (open && mode === 'create') {
-      setFormData({
-        title: "",
-        description: "",
-        priority: "medium",
-        category_id: "",
-        status: "pending"
-      });
-      setSelectedDate(undefined);
-    }
-
-    // Load categories
-    const loadCategories = async () => {
+    const fetchCategories = async () => {
       try {
         const { data, error } = await supabase
           .from('categories')
           .select('*');
-        
+          
         if (error) throw error;
-        setCategories(data || []);
+        
+        if (data) {
+          // Convertendo para o formato Category
+          const formattedCategories = data.map(cat => ({
+            id: cat.id,
+            name: cat.name,
+            color: cat.color,
+            created_at: cat.created_at,
+            updated_at: cat.updated_at,
+            user_id: cat.user_id
+          }));
+          setCategories(formattedCategories);
+        }
       } catch (error) {
-        console.error("Erro ao carregar categorias:", error);
+        console.error('Erro ao carregar categorias:', error);
       }
     };
-
+    
     if (open) {
-      loadCategories();
+      fetchCategories();
     }
-  }, [open, task, mode]);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não autenticado");
-
-      const taskData = {
-        title: formData.title,
-        description: formData.description || null,
-        priority: formData.priority,
-        category_id: formData.category_id || null,
-        status: mode === 'create' ? 'pending' : formData.status,
-        due_date: selectedDate ? selectedDate.toISOString() : null,
-        user_id: user.id
-      };
-
-      console.log("Saving task with data:", taskData);
-
-      let result;
-      if (mode === 'create') {
-        result = await supabase
-          .from('tasks')
-          .insert(taskData);
-      } else {
-        result = await supabase
-          .from('tasks')
-          .update(taskData)
-          .eq('id', task?.id);
-      }
-
-      if (result.error) throw result.error;
-
+  }, [open]);
+  
+  // Preencher os dados da tarefa se estivermos editando
+  useEffect(() => {
+    if (task && mode === 'edit') {
+      setTitle(task.title);
+      setDescription(task.description || "");
+      setDueDate(task.dueDate);
+      setCategoryId(task.category_id || "");
+      setPriority(task.priority);
+      setStatus(task.status);
+    } else {
+      // Resetar formulário para criar uma nova tarefa
+      setTitle("");
+      setDescription("");
+      setDueDate(undefined);
+      setCategoryId("");
+      setPriority("medium");
+      setStatus("pending");
+    }
+  }, [task, mode, open]);
+  
+  const handleSave = async () => {
+    if (!title.trim()) {
       toast({
-        title: mode === 'create' ? "Tarefa criada" : "Tarefa atualizada",
-        description: mode === 'create' 
-          ? "A tarefa foi criada com sucesso" 
-          : "A tarefa foi atualizada com sucesso"
+        title: "Erro",
+        description: "O título da tarefa é obrigatório.",
+        variant: "destructive"
       });
-
-      // Close modal and refresh data
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      
+      // Formatando a data (apenas se existir)
+      const formattedDate = dueDate ? dueDate.toISOString() : null;
+      
+      if (mode === 'create') {
+        // Buscar o ID do usuário atual
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
+          throw new Error("Usuário não autenticado");
+        }
+        
+        // Criar nova tarefa
+        const { error } = await supabase
+          .from('tasks')
+          .insert({
+            title,
+            description,
+            due_date: formattedDate,
+            category_id: categoryId || null,
+            priority,
+            status,
+            user_id: user.id
+          });
+          
+        if (error) throw error;
+        
+        toast({
+          title: "Tarefa criada",
+          description: "Sua tarefa foi criada com sucesso."
+        });
+      } else if (mode === 'edit' && task) {
+        // Editar tarefa existente
+        const { error } = await supabase
+          .from('tasks')
+          .update({
+            title,
+            description,
+            due_date: formattedDate,
+            category_id: categoryId || null,
+            priority,
+            status
+          })
+          .eq('id', task.id);
+          
+        if (error) throw error;
+        
+        toast({
+          title: "Tarefa atualizada",
+          description: "Sua tarefa foi atualizada com sucesso."
+        });
+      }
+      
+      // Fechar modal e notificar sucesso
       onOpenChange(false);
       if (onSuccess) onSuccess();
-    } catch (error: any) {
-      console.error("Erro ao salvar tarefa:", error);
       
+    } catch (error: any) {
+      console.error('Erro ao salvar tarefa:', error);
       toast({
-        title: "Erro ao salvar",
-        description: error.message || "Não foi possível salvar a tarefa",
+        title: "Erro",
+        description: error.message || "Ocorreu um erro ao salvar a tarefa.",
         variant: "destructive"
       });
     } finally {
       setLoading(false);
     }
   };
-
+  
+  const handleDelete = async () => {
+    if (!task) return;
+    
+    try {
+      setLoading(true);
+      
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', task.id);
+        
+      if (error) throw error;
+      
+      toast({
+        title: "Tarefa excluída",
+        description: "Sua tarefa foi excluída com sucesso."
+      });
+      
+      // Fechar modal e notificar sucesso
+      onOpenChange(false);
+      if (onSuccess) onSuccess();
+      
+    } catch (error: any) {
+      console.error('Erro ao excluir tarefa:', error);
+      toast({
+        title: "Erro",
+        description: error.message || "Ocorreu um erro ao excluir a tarefa.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>
-            {mode === 'create' ? "Criar nova tarefa" : "Editar tarefa"}
-          </DialogTitle>
+      <DialogContent className="sm:max-w-[500px] p-0">
+        <DialogHeader className="p-6 pb-2">
+          <DialogTitle>{mode === 'create' ? 'Criar Nova Tarefa' : 'Editar Tarefa'}</DialogTitle>
         </DialogHeader>
         
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+        <div className="p-6 pt-2 space-y-4">
           <div className="space-y-2">
             <Label htmlFor="title">Título</Label>
-            <Input 
+            <Input
               id="title"
-              name="title"
-              value={formData.title}
-              onChange={handleInputChange}
-              placeholder="Ex: Apresentação de projeto"
-              required
+              placeholder="Título da tarefa"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
             />
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="description">Descrição</Label>
-            <Textarea 
+            <Label htmlFor="description">Descrição (opcional)</Label>
+            <Textarea
               id="description"
-              name="description"
-              value={formData.description}
-              onChange={handleInputChange}
-              placeholder="Detalhes da tarefa (opcional)"
+              placeholder="Descrição da tarefa"
+              className="resize-none"
               rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
             />
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="priority">Prioridade</Label>
-              <Select 
-                value={formData.priority}
-                onValueChange={(value) => handleSelectChange('priority', value)}
-              >
-                <SelectTrigger id="priority">
-                  <SelectValue placeholder="Selecione a prioridade" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="high">Alta</SelectItem>
-                  <SelectItem value="medium">Média</SelectItem>
-                  <SelectItem value="low">Baixa</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="due-date">Data de vencimento</Label>
+              <Popover open={openDatePicker} onOpenChange={setOpenDatePicker}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dueDate ? (
+                      format(dueDate, "PPP", { locale: ptBR })
+                    ) : (
+                      <span className="text-muted-foreground">Selecione uma data</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={dueDate}
+                    onSelect={(date) => {
+                      setDueDate(date);
+                      setOpenDatePicker(false);
+                    }}
+                    initialFocus
+                    locale={ptBR}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
             
             <div className="space-y-2">
               <Label htmlFor="category">Categoria</Label>
-              <Select 
-                value={formData.category_id}
-                onValueChange={(value) => handleSelectChange('category_id', value)}
-              >
+              <Select value={categoryId} onValueChange={setCategoryId}>
                 <SelectTrigger id="category">
                   <SelectValue placeholder="Selecione uma categoria" />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.name}
+                    <SelectItem 
+                      key={category.id} 
+                      value={category.id}
+                      className="flex items-center gap-2"
+                    >
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: category.color }}></span>
+                      <span>{category.name}</span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -218,73 +286,63 @@ export const TaskModal = ({ open, onOpenChange, task, mode, onSuccess }: TaskMod
             </div>
           </div>
           
-          <div className="space-y-2">
-            <Label htmlFor="dueDate">Data de Vencimento</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !selectedDate && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {selectedDate ? (
-                    format(selectedDate, "PPP", { locale: ptBR })
-                  ) : (
-                    <span>Selecione uma data</span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-          
-          {mode === 'edit' && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
-              <Select 
-                value={formData.status}
-                onValueChange={(value) => handleSelectChange('status', value)}
-              >
-                <SelectTrigger id="status">
-                  <SelectValue placeholder="Selecione o status" />
+              <Label htmlFor="priority">Prioridade</Label>
+              <Select value={priority} onValueChange={(value) => setPriority(value as Priority)}>
+                <SelectTrigger id="priority">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pending">Pendente</SelectItem>
-                  <SelectItem value="in-progress">Em Andamento</SelectItem>
-                  <SelectItem value="completed">Concluída</SelectItem>
+                  <SelectItem value="low">Baixa</SelectItem>
+                  <SelectItem value="medium">Média</SelectItem>
+                  <SelectItem value="high">Alta</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            
+            {mode === 'edit' && (
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select value={status} onValueChange={(value) => setStatus(value as TaskStatus)}>
+                  <SelectTrigger id="status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pendente</SelectItem>
+                    <SelectItem value="in-progress">Em Andamento</SelectItem>
+                    <SelectItem value="completed">Concluída</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        <DialogFooter className="px-6 pb-6 pt-2">
+          {mode === 'edit' && (
+            <Button 
+              variant="destructive" 
+              onClick={handleDelete} 
+              disabled={loading}
+              className="mr-auto"
+            >
+              Excluir
+            </Button>
           )}
           
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancelar
-            </Button>
-            <Button 
-              type="submit"
-              disabled={loading}
-            >
-              {loading ? (
-                <div className="animate-spin h-5 w-5 border-2 border-current border-t-transparent rounded-full" />
-              ) : mode === 'create' ? "Criar Tarefa" : "Salvar Alterações"}
-            </Button>
-          </DialogFooter>
-        </form>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+            Cancelar
+          </Button>
+          
+          <Button onClick={handleSave} disabled={loading}>
+            {loading ? (
+              <div className="animate-spin h-5 w-5 border-2 border-current border-t-transparent rounded-full"></div>
+            ) : (
+              mode === 'create' ? 'Criar' : 'Salvar'
+            )}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

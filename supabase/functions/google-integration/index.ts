@@ -10,8 +10,8 @@ const corsHeaders = {
 // Google OAuth2 configuration
 const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || '';
 const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
-const REDIRECT_URI = Deno.env.get('REDIRECT_URI') || 'https://cehyvmdrnzidrmlvwzqx.supabase.co/functions/v1/google-integration/callback';
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'https://cehyvmdrnzidrmlvwzqx.supabase.co';
+const REDIRECT_URI = Deno.env.get('REDIRECT_URI') || '';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || '';
 
 console.log("Edge function initialized with configuration:");
@@ -145,7 +145,7 @@ serve(async (req) => {
         const { data: userIntegration, error: integrationError } = await supabase
           .from('user_integrations')
           .upsert({
-            user_id: state,
+            user_id: user.id,
             google_refresh_token: tokenData.refresh_token,
             google_calendar_sync: requestData.calendar || false,
             google_fitness_sync: requestData.fitness || false,
@@ -165,7 +165,7 @@ serve(async (req) => {
         // If calendar sync was requested, immediately sync the calendar
         if (requestData.calendar) {
           try {
-            await syncCalendarEvents(state, tokenData.access_token, supabase);
+            await syncCalendarEvents(user.id, tokenData.access_token, supabase);
             console.log("Initial calendar sync completed");
           } catch (syncError) {
             console.error("Initial calendar sync failed:", syncError);
@@ -252,7 +252,7 @@ serve(async (req) => {
 });
 
 // Function to sync calendar events
-async function syncCalendarEvents(userId, accessToken, supabase) {
+async function syncCalendarEvents(userId: string, accessToken: string, supabase: any): Promise<number> {
   console.log("Starting calendar sync for user", userId);
   
   // Fetch events from Google Calendar
@@ -281,7 +281,7 @@ async function syncCalendarEvents(userId, accessToken, supabase) {
   }
 
   // Process and store calendar events
-  const events = calendarData.items.map((event) => ({
+  const events = calendarData.items.map((event: any) => ({
     user_id: userId,
     title: event.summary || 'Sem título',
     description: event.description,
