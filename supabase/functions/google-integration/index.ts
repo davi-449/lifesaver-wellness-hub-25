@@ -20,6 +20,19 @@ console.log("GOOGLE_CLIENT_ID exists:", !!GOOGLE_CLIENT_ID);
 console.log("GOOGLE_CLIENT_SECRET exists:", !!GOOGLE_CLIENT_SECRET);
 console.log("REDIRECT_URI:", REDIRECT_URI);
 
+// Validate configuration
+if (!GOOGLE_CLIENT_ID) {
+  console.error("ERROR: GOOGLE_CLIENT_ID environment variable is not set");
+}
+
+if (!GOOGLE_CLIENT_SECRET) {
+  console.error("ERROR: GOOGLE_CLIENT_SECRET environment variable is not set");
+}
+
+if (!REDIRECT_URI) {
+  console.error("ERROR: REDIRECT_URI environment variable is not set");
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -58,6 +71,22 @@ serve(async (req) => {
     const url = new URL(req.url);
     const action = requestData.action || url.pathname.split('/').pop();
     console.log(`Processing action: ${action}`);
+    
+    // Check for required environment variables
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !REDIRECT_URI) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Configuração incompleta do servidor', 
+          details: 'As variáveis de ambiente necessárias não estão configuradas. Por favor, configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e REDIRECT_URI.',
+          missingVars: {
+            GOOGLE_CLIENT_ID: !GOOGLE_CLIENT_ID,
+            GOOGLE_CLIENT_SECRET: !GOOGLE_CLIENT_SECRET,
+            REDIRECT_URI: !REDIRECT_URI
+          }
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     
     switch (action) {
       case 'auth': {

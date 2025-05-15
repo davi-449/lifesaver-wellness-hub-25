@@ -1,241 +1,208 @@
 
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Droplet, Plus, Minus } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { useToast } from "@/hooks/use-toast";
+import { Droplet, Plus, Minus } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { format } from "date-fns";
 
 export function WaterTracker() {
   const { toast } = useToast();
   const [waterIntake, setWaterIntake] = useState(0);
-  const [targetIntake, setTargetIntake] = useState(2500);
-  const [loading, setLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
-  const glassSize = 250; // ml
-  
-  const percentComplete = Math.min(Math.round((waterIntake / targetIntake) * 100), 100);
-  
+  const [goal, setGoal] = useState(2000); // Default goal: 2000ml
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Load water intake data for today
   useEffect(() => {
-    const fetchUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
-        fetchWaterIntake();
-        fetchWaterGoal();
-      } else {
-        setLoading(false);
+    const loadWaterData = async () => {
+      try {
+        // Get current user
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          throw new Error("Usuário não autenticado");
+        }
+
+        // Get user's water intake goal
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('water_intake_goal')
+          .eq('id', user.id)
+          .single();
+          
+        if (profile?.water_intake_goal) {
+          setGoal(profile.water_intake_goal);
+        }
+        
+        // Get today's water intake
+        const today = format(new Date(), 'yyyy-MM-dd');
+        const { data: waterData } = await supabase
+          .from('water_intake')
+          .select('amount')
+          .eq('user_id', user.id)
+          .eq('date', today)
+          .maybeSingle();
+          
+        if (waterData) {
+          setWaterIntake(waterData.amount);
+        }
+      } catch (error) {
+        console.error("Error loading water data:", error);
+        toast({
+          title: "Erro ao carregar dados",
+          description: "Não foi possível carregar os dados de hidratação",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoading(false);
       }
     };
     
-    fetchUser();
-  }, []);
-  
-  const fetchWaterGoal = async () => {
+    loadWaterData();
+  }, [toast]);
+
+  const updateWaterIntake = async (amount: number) => {
+    // Prevent negative values
+    if (waterIntake + amount < 0) return;
+    
+    setIsSaving(true);
     try {
-      if (!userId) return;
-      
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('water_intake_goal')
-        .eq('id', userId)
-        .single();
-      
-      if (error) throw error;
-      
-      if (profile && profile.water_intake_goal) {
-        setTargetIntake(profile.water_intake_goal);
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("Usuário não autenticado");
       }
-    } catch (error) {
-      console.error("Erro ao buscar meta de hidratação:", error);
-    }
-  };
-  
-  const fetchWaterIntake = async () => {
-    try {
-      if (!userId) return;
       
-      // Get today's water intake
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const newAmount = waterIntake + amount;
+      setWaterIntake(newAmount);
       
-      const { data, error } = await supabase
+      const today = format(new Date(), 'yyyy-MM-dd');
+      
+      // Check if there's an entry for today
+      const { data: existingEntry } = await supabase
         .from('water_intake')
-        .select('amount')
-        .eq('user_id', userId)
-        .gte('date', today.toISOString())
-        .lt('date', new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString());
-      
-      if (error) throw error;
-      
-      // Sum all water intake for today
-      const totalIntake = data?.reduce((sum, record) => sum + (record.amount || 0), 0) || 0;
-      setWaterIntake(totalIntake);
-    } catch (error) {
-      console.error("Erro ao buscar hidratação:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const addWater = async () => {
-    if (!userId) {
-      toast({
-        title: "Erro de autenticação",
-        description: "Você precisa estar logado para registrar hidratação.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    const newIntake = waterIntake + glassSize;
-    
-    try {
-      const { error } = await supabase
-        .from('water_intake')
-        .insert({
-          amount: glassSize,
-          date: new Date().toISOString(),
-          user_id: userId
-        });
-      
-      if (error) throw error;
-      
-      setWaterIntake(newIntake);
-      
-      if (newIntake >= targetIntake && waterIntake < targetIntake) {
-        toast({
-          title: "Meta de hidratação atingida!",
-          description: "Você atingiu sua meta diária de hidratação. Parabéns!",
-        });
-      }
-    } catch (error) {
-      console.error("Erro ao adicionar água:", error);
-      toast({
-        title: "Erro ao registrar hidratação",
-        description: "Não foi possível registrar sua hidratação. Tente novamente.",
-        variant: "destructive"
-      });
-    }
-  };
-  
-  const removeWater = async () => {
-    if (waterIntake <= 0) return;
-    
-    if (!userId) {
-      toast({
-        title: "Erro de autenticação",
-        description: "Você precisa estar logado para gerenciar hidratação.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    try {
-      // First we need to find the most recent water intake record
-      const { data, error: fetchError } = await supabase
-        .from('water_intake')
-        .select('id, amount')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(1);
-      
-      if (fetchError) throw fetchError;
-      
-      if (data && data.length > 0) {
-        const { error } = await supabase
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('date', today)
+        .maybeSingle();
+        
+      if (existingEntry) {
+        // Update existing entry
+        await supabase
           .from('water_intake')
-          .delete()
-          .eq('id', data[0].id);
-        
-        if (error) throw error;
-        
-        setWaterIntake(Math.max(0, waterIntake - data[0].amount));
+          .update({ amount: newAmount })
+          .eq('id', existingEntry.id);
+      } else {
+        // Create new entry
+        await supabase
+          .from('water_intake')
+          .insert({ 
+            user_id: user.id,
+            date: today, 
+            amount: newAmount 
+          });
       }
-    } catch (error) {
-      console.error("Erro ao remover água:", error);
+      
+      // Show toast for significant achievements
+      if (newAmount >= goal && waterIntake < goal) {
+        toast({
+          title: "Meta diária atingida!",
+          description: "Você alcançou sua meta de hidratação para hoje. Parabéns!"
+        });
+      } else if (amount > 0) {
+        toast({
+          title: "Hidratação registrada",
+          description: `+${amount}ml adicionados ao seu progresso`
+        });
+      }
+      
+    } catch (error: any) {
+      console.error("Error updating water intake:", error);
       toast({
-        title: "Erro ao remover hidratação",
-        description: "Não foi possível remover o registro de hidratação. Tente novamente.",
+        title: "Erro ao atualizar hidratação",
+        description: error.message || "Não foi possível salvar seu progresso",
         variant: "destructive"
       });
+      setWaterIntake(waterIntake); // Revert back
+    } finally {
+      setIsSaving(false);
     }
   };
-  
-  // Generate water drops based on waterIntake
-  const waterDrops = [];
-  const totalDrops = Math.floor(targetIntake / glassSize);
-  const filledDrops = Math.min(Math.floor(waterIntake / glassSize), totalDrops);
-  
-  for (let i = 0; i < totalDrops; i++) {
-    const isFilled = i < filledDrops;
-    
-    waterDrops.push(
-      <div 
-        key={i} 
-        className={`inline-flex items-center justify-center rounded-full w-8 h-8 ${
-          isFilled ? 'bg-blue-500' : 'bg-blue-200'
-        }`}
-        title={`${(i + 1) * glassSize}ml`}
-      >
-        <Droplet className="h-4 w-4 text-white" />
-      </div>
-    );
-  }
+
+  const percentage = Math.min(Math.round((waterIntake / goal) * 100), 100);
 
   return (
     <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center">
-          <Droplet className="mr-2 h-5 w-5 text-blue-500" />
+      <CardHeader>
+        <CardTitle className="text-xl flex items-center">
+          <Droplet className="mr-2 text-blue-400" />
           Hidratação
         </CardTitle>
-        <CardDescription>
-          Acompanhe seu consumo diário de água
-        </CardDescription>
       </CardHeader>
       <CardContent>
-        {loading ? (
-          <div className="h-[200px] flex items-center justify-center">
-            Carregando...
-          </div>
-        ) : !userId ? (
-          <div className="h-[200px] flex items-center justify-center flex-col gap-2">
-            <p className="text-muted-foreground text-center">
-              Você precisa estar logado para ver seu registro de hidratação
-            </p>
+        {isLoading ? (
+          <div className="flex justify-center py-6">
+            <div className="animate-spin h-6 w-6 border-b-2 border-blue-400 rounded-full"></div>
           </div>
         ) : (
-          <>
-            <div className="text-center mb-4">
-              <span className="text-3xl font-bold">{(waterIntake / 1000).toFixed(1)}L</span>
-              <span className="text-muted-foreground"> / {(targetIntake / 1000).toFixed(1)}L</span>
+          <div className="space-y-4">
+            <div className="text-center">
+              <span className="text-4xl font-bold">{waterIntake}</span>
+              <span className="text-muted-foreground">/{goal} ml</span>
             </div>
             
-            <Progress value={percentComplete} className="h-2 mb-6" />
+            <Progress value={percentage} className="h-3" />
             
-            <div className="flex justify-center gap-2 flex-wrap mb-6">
-              {waterDrops}
+            <div className="text-center text-muted-foreground">
+              {percentage}% da meta diária
             </div>
-            
-            <div className="flex justify-center space-x-4">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={removeWater}
-                disabled={waterIntake <= 0}
-              >
-                <Minus className="h-4 w-4" />
-              </Button>
-              <Button onClick={addWater} className="px-6">
-                <Droplet className="mr-2 h-4 w-4" />
-                Adicionar {glassSize}ml
-              </Button>
-            </div>
-          </>
+          </div>
         )}
       </CardContent>
+      <CardFooter className="flex justify-between">
+        <Button 
+          variant="outline" 
+          size="icon"
+          disabled={waterIntake <= 0 || isSaving}
+          onClick={() => updateWaterIntake(-250)}
+        >
+          <Minus className="h-4 w-4" />
+        </Button>
+        <div className="space-x-2">
+          <Button 
+            variant="outline"
+            disabled={isSaving}
+            onClick={() => updateWaterIntake(100)}
+          >
+            +100ml
+          </Button>
+          <Button 
+            variant="outline"
+            disabled={isSaving}
+            onClick={() => updateWaterIntake(250)}
+          >
+            +250ml
+          </Button>
+          <Button 
+            variant="default"
+            disabled={isSaving}
+            onClick={() => updateWaterIntake(500)}
+          >
+            +500ml
+          </Button>
+        </div>
+        <Button 
+          variant="outline" 
+          size="icon"
+          disabled={isSaving}
+          onClick={() => updateWaterIntake(1000)}
+          className="text-xs"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+      </CardFooter>
     </Card>
   );
 }

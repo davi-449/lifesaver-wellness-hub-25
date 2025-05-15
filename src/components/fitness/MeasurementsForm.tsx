@@ -1,256 +1,241 @@
 
-import { useState, useEffect } from "react";
-import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
+import React, { useState } from "react";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { format } from "date-fns";
+import { useToast } from "@/components/ui/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { TrendingUp } from "lucide-react";
 
 export function MeasurementsForm() {
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [measurements, setMeasurements] = useState({
     weight: "",
+    bodyFat: "",
     chest: "",
     waist: "",
     hips: "",
     arms: "",
     thighs: "",
-    body_fat: "",
     notes: ""
   });
-
-  // Fetch current user on component mount
-  useEffect(() => {
-    const fetchUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
-      }
-    };
-    
-    fetchUser();
-  }, []);
-
+  
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setMeasurements({
-      ...measurements,
-      [name]: value
-    });
+    setMeasurements(prev => ({ ...prev, [name]: value }));
   };
-
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-
-    if (!userId) {
-      toast({
-        title: "Erro de autenticação",
-        description: "Você precisa estar logado para salvar medidas corporais.",
-        variant: "destructive"
-      });
-      setLoading(false);
-      return;
-    }
-
+    setIsSubmitting(true);
+    
     try {
-      // Convert empty strings to null
-      const measurementsData = Object.entries(measurements).reduce((acc, [key, value]) => {
-        acc[key] = value === "" ? null : key === "notes" ? value : parseFloat(value);
-        return acc;
-      }, {} as Record<string, any>);
-
-      const { error } = await supabase
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error("Usuário não autenticado");
+      }
+      
+      const currentDate = format(new Date(), "yyyy-MM-dd");
+      
+      // First check if there's already an entry for today
+      const { data: existingData } = await supabase
         .from('body_measurements')
-        .insert({
-          ...measurementsData,
-          date: new Date().toISOString(),
-          user_id: userId
-        });
-
-      if (error) throw error;
-
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('date', currentDate)
+        .maybeSingle();
+      
+      const measurementData = {
+        user_id: user.id,
+        date: currentDate,
+        weight: measurements.weight ? parseFloat(measurements.weight) : null,
+        body_fat: measurements.bodyFat ? parseFloat(measurements.bodyFat) : null,
+        chest: measurements.chest ? parseFloat(measurements.chest) : null,
+        waist: measurements.waist ? parseFloat(measurements.waist) : null,
+        hips: measurements.hips ? parseFloat(measurements.hips) : null,
+        arms: measurements.arms ? parseFloat(measurements.arms) : null,
+        thighs: measurements.thighs ? parseFloat(measurements.thighs) : null,
+        notes: measurements.notes
+      };
+      
+      let result;
+      
+      if (existingData?.id) {
+        // Update existing record
+        result = await supabase
+          .from('body_measurements')
+          .update(measurementData)
+          .eq('id', existingData.id);
+      } else {
+        // Insert new record
+        result = await supabase
+          .from('body_measurements')
+          .insert(measurementData);
+      }
+      
+      if (result.error) {
+        throw result.error;
+      }
+      
       toast({
-        title: "Medidas registradas com sucesso!",
-        description: "Suas medidas foram adicionadas ao seu histórico."
+        title: "Medidas registradas com sucesso",
+        description: "Suas medidas corporais foram salvas"
       });
-
-      setOpen(false);
-      resetForm();
-    } catch (error) {
-      console.error("Erro ao salvar medidas:", error);
+      
+      // Clear form
+      setMeasurements({
+        weight: "",
+        bodyFat: "",
+        chest: "",
+        waist: "",
+        hips: "",
+        arms: "",
+        thighs: "",
+        notes: ""
+      });
+      
+    } catch (error: any) {
+      console.error("Error saving measurements:", error);
       toast({
-        title: "Erro ao registrar medidas",
-        description: "Houve um problema ao salvar suas medidas. Tente novamente.",
+        title: "Erro ao salvar medidas",
+        description: error.message || "Não foi possível salvar suas medidas",
         variant: "destructive"
       });
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
-  const resetForm = () => {
-    setMeasurements({
-      weight: "",
-      chest: "",
-      waist: "",
-      hips: "",
-      arms: "",
-      thighs: "",
-      body_fat: "",
-      notes: ""
-    });
-  };
-
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline">
-          <TrendingUp className="mr-2 h-4 w-4" />
-          Medidas
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="flex items-center">
-            <TrendingUp className="mr-2 h-5 w-5 text-primary" />
-            Registrar Medidas Corporais
-          </DialogTitle>
-        </DialogHeader>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-xl">Registrar Medidas</CardTitle>
+      </CardHeader>
+      <form onSubmit={handleSubmit}>
+        <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="weight">Peso (kg)</Label>
               <Input 
-                id="weight" 
+                id="weight"
                 name="weight"
                 type="number"
                 step="0.1"
-                placeholder="Ex: 70.5" 
+                placeholder="70.5"
                 value={measurements.weight}
                 onChange={handleChange}
               />
             </div>
-            
             <div className="space-y-2">
-              <Label htmlFor="body_fat">% Gordura Corporal</Label>
+              <Label htmlFor="bodyFat">Gordura Corporal (%)</Label>
               <Input 
-                id="body_fat" 
-                name="body_fat"
+                id="bodyFat"
+                name="bodyFat"
                 type="number"
                 step="0.1"
-                placeholder="Ex: 15.5" 
-                value={measurements.body_fat}
+                placeholder="15.0"
+                value={measurements.bodyFat}
                 onChange={handleChange}
               />
             </div>
           </div>
-          
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="chest">Peito (cm)</Label>
               <Input 
-                id="chest" 
+                id="chest"
                 name="chest"
                 type="number"
                 step="0.1"
-                placeholder="Ex: 95.0" 
+                placeholder="90.0"
                 value={measurements.chest}
                 onChange={handleChange}
               />
             </div>
-            
             <div className="space-y-2">
               <Label htmlFor="waist">Cintura (cm)</Label>
               <Input 
-                id="waist" 
+                id="waist"
                 name="waist"
                 type="number"
                 step="0.1"
-                placeholder="Ex: 80.0" 
+                placeholder="80.0"
                 value={measurements.waist}
                 onChange={handleChange}
               />
             </div>
           </div>
-          
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="hips">Quadril (cm)</Label>
               <Input 
-                id="hips" 
+                id="hips"
                 name="hips"
                 type="number"
                 step="0.1"
-                placeholder="Ex: 100.0" 
+                placeholder="95.0"
                 value={measurements.hips}
                 onChange={handleChange}
               />
             </div>
-            
             <div className="space-y-2">
               <Label htmlFor="arms">Braços (cm)</Label>
               <Input 
-                id="arms" 
+                id="arms"
                 name="arms"
                 type="number"
                 step="0.1"
-                placeholder="Ex: 35.0" 
+                placeholder="35.0"
                 value={measurements.arms}
                 onChange={handleChange}
               />
             </div>
           </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="thighs">Coxas (cm)</Label>
-            <Input 
-              id="thighs" 
-              name="thighs"
-              type="number"
-              step="0.1"
-              placeholder="Ex: 55.0" 
-              value={measurements.thighs}
-              onChange={handleChange}
-            />
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="thighs">Coxas (cm)</Label>
+              <Input 
+                id="thighs"
+                name="thighs"
+                type="number"
+                step="0.1"
+                placeholder="55.0"
+                value={measurements.thighs}
+                onChange={handleChange}
+              />
+            </div>
           </div>
-          
+
           <div className="space-y-2">
             <Label htmlFor="notes">Observações</Label>
             <Textarea 
-              id="notes" 
+              id="notes"
               name="notes"
-              placeholder="Notas adicionais..." 
+              placeholder="Adicione notas sobre sua medição..."
               value={measurements.notes}
               onChange={handleChange}
-              rows={3}
             />
           </div>
-          
-          <div className="flex justify-end gap-2 pt-4">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={() => setOpen(false)}
-            >
-              Cancelar
-            </Button>
-            <Button 
-              type="submit" 
-              disabled={loading}
-            >
-              {loading ? "Salvando..." : "Salvar Medidas"}
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </CardContent>
+        <CardFooter>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? (
+              <span className="flex items-center">
+                <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-white rounded-full" />
+                Salvando...
+              </span>
+            ) : "Salvar Medidas"}
+          </Button>
+        </CardFooter>
+      </form>
+    </Card>
   );
 }

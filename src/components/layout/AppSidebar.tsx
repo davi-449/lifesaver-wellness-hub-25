@@ -1,160 +1,144 @@
 
-import React, { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { Home, ListTodo, Calendar, Dumbbell, User, X } from "lucide-react";
+import React from "react";
 import { cn } from "@/lib/utils";
+import { Link, useLocation } from "react-router-dom";
+import { 
+  Home, 
+  Calendar, 
+  CheckSquare, 
+  Activity, 
+  User, 
+  LogOut, 
+  Menu, 
+  X 
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { supabase } from "@/integrations/supabase/client";
 
-export function AppSidebar() {
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+interface AppSidebarProps {
+  sidebarOpen: boolean;
+  setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  isMobile: boolean;
+}
+
+export function AppSidebar({ sidebarOpen, setSidebarOpen, isMobile }: AppSidebarProps) {
   const location = useLocation();
   
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const navItems = [
-    {
-      title: "Dashboard",
-      href: "/",
-      icon: Home,
-    },
-    {
-      title: "Tarefas",
-      href: "/tasks",
-      icon: ListTodo,
-    },
-    {
-      title: "Agenda",
-      href: "/calendar",
-      icon: Calendar,
-    },
-    {
-      title: "Fitness",
-      href: "/fitness",
-      icon: Dumbbell,
-    },
-    {
-      title: "Perfil",
-      href: "/profile",
-      icon: User,
-    },
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+  };
+  
+  const menuItems = [
+    { icon: <Home className="size-5" />, label: "Dashboard", to: "/" },
+    { icon: <Calendar className="size-5" />, label: "Calendário", to: "/calendar" },
+    { icon: <CheckSquare className="size-5" />, label: "Tarefas", to: "/tasks" },
+    { icon: <Activity className="size-5" />, label: "Fitness", to: "/fitness" },
+    { icon: <User className="size-5" />, label: "Perfil", to: "/profile" },
   ];
 
-  const isActive = (href: string) => {
-    return location.pathname === href;
+  const isActive = (path: string) => {
+    return location.pathname === path;
   };
 
-  // Mobile version
-  if (isMobile) {
-    return (
-      <>
-        {/* Mobile overlay */}
-        {mobileMenuOpen && (
-          <div 
-            className="fixed inset-0 bg-black/50 z-30"
-            onClick={() => setMobileMenuOpen(false)}
-          />
-        )}
-        
-        {/* Mobile sidebar */}
-        <aside 
+  return (
+    <>
+      {/* Desktop sidebar */}
+      {!isMobile && (
+        <div
           className={cn(
-            "fixed top-0 left-0 h-full w-64 z-40 bg-background border-r transform transition-transform duration-300 ease-in-out",
-            mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+            "fixed left-0 top-0 z-40 flex h-screen flex-col border-r bg-card transition-all duration-300",
+            sidebarOpen ? "w-64" : "w-16"
           )}
         >
-          <div className="flex items-center justify-between h-16 px-4 border-b">
-            <Link to="/" className="text-xl font-semibold text-primary">
-              WellnessHub
-            </Link>
-            <button 
-              onClick={() => setMobileMenuOpen(false)}
-              className="p-2 rounded-md hover:bg-accent"
+          <div className="flex items-center justify-between p-4">
+            {sidebarOpen && (
+              <h2 className="text-xl font-bold">WellnessHub</h2>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="ml-auto"
             >
-              <X className="h-5 w-5" />
-            </button>
+              {sidebarOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+            </Button>
           </div>
           
-          <nav className="p-2">
-            <ul className="space-y-1">
-              {navItems.map((item) => (
-                <li key={item.href}>
-                  <Link
-                    to={item.href}
-                    className={cn(
-                      "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                      isActive(item.href)
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                    )}
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <item.icon className="h-5 w-5" />
-                    <span>{item.title}</span>
-                  </Link>
-                </li>
+          <div className="flex-1 overflow-y-auto py-4">
+            <nav className="space-y-1 px-2">
+              {menuItems.map((item) => (
+                <Tooltip key={item.to} delayDuration={0}>
+                  <TooltipTrigger asChild>
+                    <Link
+                      to={item.to}
+                      className={cn(
+                        "flex items-center rounded-md px-3 py-3 text-sm font-medium transition-colors",
+                        isActive(item.to)
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      <span className="mr-3 flex-shrink-0">{item.icon}</span>
+                      {sidebarOpen && <span>{item.label}</span>}
+                    </Link>
+                  </TooltipTrigger>
+                  {!sidebarOpen && (
+                    <TooltipContent side="right">
+                      {item.label}
+                    </TooltipContent>
+                  )}
+                </Tooltip>
               ))}
-            </ul>
-          </nav>
-        </aside>
-        
-        {/* Mobile bottom navigation */}
-        <div className="fixed bottom-0 left-0 right-0 z-30 bg-background border-t py-2 px-4 flex justify-around items-center">
-          {navItems.map((item) => (
+            </nav>
+          </div>
+          
+          <div className="border-t p-4">
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className={cn(
+                    "w-full justify-start text-left flex items-center px-3 py-2 text-sm font-medium",
+                    "text-red-500 hover:bg-muted hover:text-red-600"
+                  )}
+                  onClick={handleLogout}
+                >
+                  <LogOut className="mr-3 size-5" />
+                  {sidebarOpen && <span>Sair</span>}
+                </Button>
+              </TooltipTrigger>
+              {!sidebarOpen && (
+                <TooltipContent side="right">
+                  Sair
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </div>
+        </div>
+      )}
+      
+      {/* Mobile bottom navigation */}
+      {isMobile && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t flex items-center justify-around py-2">
+          {menuItems.map((item) => (
             <Link
-              key={item.href}
-              to={item.href}
+              key={item.to}
+              to={item.to}
               className={cn(
-                "flex flex-col items-center justify-center p-2 rounded-md transition-transform hover:scale-110",
-                isActive(item.href)
+                "flex flex-col items-center justify-center p-2 text-xs",
+                isActive(item.to)
                   ? "text-primary"
                   : "text-muted-foreground"
               )}
             >
-              <item.icon className="h-5 w-5" />
-              <span className="text-xs mt-1">{item.title}</span>
+              <span>{item.icon}</span>
+              <span className="mt-1">{item.label}</span>
             </Link>
           ))}
         </div>
-      </>
-    );
-  }
-
-  // Desktop version - now fixed (always shown)
-  return (
-    <aside className="fixed top-0 left-0 h-full w-64 bg-background border-r z-10">
-      <div className="flex items-center h-16 px-4 border-b">
-        <Link to="/" className="text-xl font-semibold text-primary">
-          WellnessHub
-        </Link>
-      </div>
-      
-      <nav className="p-2">
-        <ul className="space-y-1">
-          {navItems.map((item) => (
-            <li key={item.href}>
-              <Link
-                to={item.href}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                  isActive(item.href)
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                )}
-              >
-                <item.icon className="h-5 w-5" />
-                <span>{item.title}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </nav>
-    </aside>
+      )}
+    </>
   );
 }

@@ -16,8 +16,8 @@ export function AppLayout({ children }: AppLayoutProps) {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
       
-      // No mobile, fechamos a sidebar lateralmente, 
-      // mas ela aparecerá na parte inferior
+      // On desktop the sidebar is always open
+      // On mobile, it appears at the bottom
       if (mobile !== isMobile) {
         setSidebarOpen(!mobile);
       }
@@ -29,14 +29,14 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="flex min-h-screen w-full bg-background">
-      <AppSidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} isMobile={isMobile} />
+      <AppSidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} isMobile={isMobile} />
       <main className={cn(
         "flex-1 transition-all duration-300",
         isMobile 
-          ? "p-4 pb-20" // Adiciona espaço inferior para navegação móvel
+          ? "p-4 pb-20" // Adds space at the bottom for mobile navigation
           : sidebarOpen 
-            ? "p-6 ml-64" // Adiciona margem para a sidebar
-            : "p-6 ml-16"  // Espaço menor quando a sidebar está minimizada
+            ? "p-6 ml-64" // Adds margin for the sidebar
+            : "p-6 ml-16"  // Smaller space when sidebar is minimized
       )}>
         {children}
       </main>
