@@ -1,6 +1,5 @@
 
 import * as React from "react";
-import { toast as sonnerToast } from "sonner";
 import {
   ToastActionElement,
   ToastProps,
@@ -24,17 +23,17 @@ interface ToastInfo {
   duration?: number;
 }
 
-// Create a simple toast store manager
+// Create the toast store manager as a React hook
 const useToastStore = () => {
   const [toasts, setToasts] = React.useState<ToastInfo[]>([]);
 
-  const addToast = (toast: ToastInfo) => {
+  const addToast = React.useCallback((toast: ToastInfo) => {
     setToasts((current) => [...current, toast]);
-  };
+  }, []);
 
-  const removeToast = (id: string) => {
+  const removeToast = React.useCallback((id: string) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));
-  };
+  }, []);
 
   return {
     toasts,
@@ -43,48 +42,78 @@ const useToastStore = () => {
   };
 };
 
-// Create a singleton instance of the toast store
-const toastStore = useToastStore();
+// Create a singleton context for the toast store
+const ToastContext = React.createContext<ReturnType<typeof useToastStore> | null>(null);
 
-const toast = ({ title, description, action, ...props }: ToastOptions) => {
-  const id = sonnerToast.custom(
-    () => <></>, // Empty placeholder as we'll render via our own component
-    {
-      duration: 5000,
-      ...props,
-    }
+export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
+  const store = useToastStore();
+  
+  return (
+    <ToastContext.Provider value={store}>
+      {children}
+    </ToastContext.Provider>
   );
-  
-  // Add toast to our store - ensure the id is a string
-  toastStore.addToast({
-    id: id.toString(),
-    title,
-    description,
-    action,
-    variant: props.variant,
-    className: props.className,
-    duration: props.duration,
-  });
-  
-  return id;
 };
 
-function useToast() {
+export function useToast() {
+  const store = React.useContext(ToastContext);
+  
+  if (!store) {
+    console.error("useToast must be used within a ToastProvider");
+    
+    // Provide a fallback implementation
+    return {
+      toast: () => -1,
+      dismiss: () => {},
+      toasts: [],
+      error: () => -1,
+      success: () => -1,
+    };
+  }
+  
+  const toast = React.useCallback(
+    ({ title, description, action, ...props }: ToastOptions) => {
+      const id = Math.random().toString(36).substring(2, 9);
+      
+      store.addToast({
+        id,
+        title, 
+        description, 
+        action,
+        variant: props.variant,
+        className: props.className,
+        duration: props.duration,
+      });
+      
+      return id;
+    },
+    [store]
+  );
+  
+  const dismiss = React.useCallback(
+    (id?: string) => {
+      if (id) {
+        store.removeToast(id);
+      }
+    },
+    [store]
+  );
+
   return {
     toast,
-    dismiss: (id?: string | number) => {
-      if (id) {
-        toastStore.removeToast(id.toString());
-      }
-      return sonnerToast.dismiss(id);
-    },
+    dismiss,
+    toasts: store.toasts,
     error: (message: string) => 
       toast({ title: "Erro", description: message, variant: "destructive" }),
     success: (message: string) => 
       toast({ title: "Sucesso", description: message }),
-    // Expose the toasts array for the Toaster component
-    toasts: toastStore.toasts,
   };
 }
 
-export { useToast, toast };
+// Export a standalone toast function for convenience
+export const toast = (options: ToastOptions) => {
+  const id = Math.random().toString(36).substring(2, 9);
+  // This is just a placeholder since we need the context to actually add a toast
+  console.log("Toast outside context:", options);
+  return id;
+};

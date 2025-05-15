@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { ThemeProvider } from "next-themes";
+import { ToastProvider } from "@/hooks/use-toast";
 
 // Pages
 import Index from "./pages/Index";
@@ -27,9 +28,14 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setAuthenticated(!!session);
-      setLoading(false);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setAuthenticated(!!session);
+      } catch (error) {
+        console.error("Auth check error:", error);
+      } finally {
+        setLoading(false);
+      }
     };
     
     checkAuth();
@@ -56,32 +62,38 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return authenticated ? <>{children}</> : <Navigate to="/login" replace />;
 };
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            {/* Rotas públicas */}
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/signup" element={<SignupPage />} />
-            
-            {/* Rotas protegidas */}
-            <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-            <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
-            <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
-            <Route path="/fitness" element={<ProtectedRoute><FitnessPage /></ProtectedRoute>} />
-            <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-            
-            {/* Página 404 */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  console.log("Rendering App component");
+  
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <ToastProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                {/* Rotas públicas */}
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/signup" element={<SignupPage />} />
+                
+                {/* Rotas protegidas */}
+                <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+                <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
+                <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
+                <Route path="/fitness" element={<ProtectedRoute><FitnessPage /></ProtectedRoute>} />
+                <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+                
+                {/* Página 404 */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
+        </ToastProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;

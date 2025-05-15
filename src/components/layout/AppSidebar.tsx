@@ -1,8 +1,9 @@
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Home, ListTodo, Calendar, Dumbbell, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface SidebarProps {
   isMobile: boolean;
@@ -103,8 +104,8 @@ export const Sidebar = ({ isMobile, isOpen, setIsOpen }: SidebarProps) => {
 
 // This is the component that should be imported in AppLayout.tsx
 export const AppSidebar = () => {
-  const [isOpen, setIsOpen] = React.useState(true);
-  const isMobile = window.innerWidth < 768;
+  const [isOpen, setIsOpen] = useState(true);
+  const isMobile = useIsMobile();
   
   return <Sidebar isMobile={isMobile} isOpen={isOpen} setIsOpen={setIsOpen} />;
 };
