@@ -25,7 +25,7 @@ export type ToastActionElement = React.ReactElement<{
 }>;
 
 const TOAST_LIMIT = 5;
-export const TOAST_REMOVE_DELAY = 1000000;
+export const TOAST_REMOVE_DELAY = 5000; // Reduzido para 5 segundos em vez de 1000000
 
 type ToasterToast = Toast & {
   id: string;
@@ -77,7 +77,7 @@ interface State {
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
-// Changed from const to let so we can reassign it
+// Usando let em vez de const para poder modificar o estado
 let memoryState: State = { toasts: [] };
 
 function reducer(state: State, action: Action): State {
@@ -203,7 +203,7 @@ export function useToast() {
   }, []);
 
   return {
-    ...state,
+    toasts: state.toasts,
     toast,
     dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
   };
